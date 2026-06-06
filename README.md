@@ -116,7 +116,7 @@ npx vercel --prod
 Production URL:
 
 ```text
-https://miraforge-swap.vercel.app/
+https://paymorph.vercel.app/
 ```
 
 Use this URL for the Telegram Main Mini App and menu button.
