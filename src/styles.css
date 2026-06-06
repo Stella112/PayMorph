@@ -390,6 +390,16 @@ textarea {
   font-weight: 700;
 }
 
+.merchant-share-panel {
+  align-content: start;
+}
+
+.merchant-share-actions {
+  display: grid;
+  gap: 10px;
+  margin-top: 12px;
+}
+
 .token-picker {
   display: grid;
   grid-template-columns: repeat(4, 1fr);

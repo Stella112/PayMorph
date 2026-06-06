@@ -276,9 +276,12 @@ export default function App() {
   }, []);
 
   const activeInvoice = invoices.find((invoice) => invoice.id === activeInvoiceId) || invoices[0];
+  const isMerchantShareMode = Boolean(
+    activeInvoice && view === "pay" && !isSharedCheckout && activeInvoice.status !== "paid",
+  );
   const { quote, status: quoteStatus, error: quoteError } = useLiveTonToUsdtQuote(
     activeInvoice?.amount || "0",
-    Boolean(activeInvoice && view === "pay" && activeInvoice.status !== "paid"),
+    Boolean(activeInvoice && view === "pay" && activeInvoice.status !== "paid" && !isMerchantShareMode),
   );
   const quotedTonAmount = quote ? unitsToDecimal(quote.inputUnits, 9, 6) : null;
   const swapData = quote?.settlementData.$case === "swap" ? quote.settlementData.value : null;
@@ -340,6 +343,7 @@ Reference context: ${MIRA_CONTEXT_URL}`;
     };
     setInvoices((current) => [invoice, ...current]);
     setActiveInvoiceId(invoice.id);
+    setIsSharedCheckout(false);
     setPaymentStatus("idle");
     setPaymentError("");
     setView("pay");
@@ -730,7 +734,7 @@ Help me review upcoming collections, explain route risks, and draft reminders. N
                   <div className="row-actions">
                     <button onClick={() => copyPaymentLink(invoice)} title="Copy payment link">{copied === invoice.id ? <Check size={17} /> : <Copy size={17} />}</button>
                     <button onClick={() => shareTelegramPaymentLink(invoice)} title="Copy Telegram Mini App link">{copied === `telegram:${invoice.id}` ? <Check size={17} /> : <Send size={17} />}</button>
-                    <button onClick={() => { setActiveInvoiceId(invoice.id); setPaymentStatus("idle"); setView("pay"); }} title="Open payment"><ArrowRight size={17} /></button>
+                    <button onClick={() => { setActiveInvoiceId(invoice.id); setIsSharedCheckout(false); setPaymentStatus("idle"); setView("pay"); }} title="Open payment"><ArrowRight size={17} /></button>
                   </div>
                 </article>
               ))}
@@ -982,27 +986,47 @@ Help me review upcoming collections, explain route risks, and draft reminders. N
           </section>
 
           <section className="grid">
-            <div className="panel">
-              <div className="panel-title"><Wallet size={20} /> Pay with TON</div>
-              <div className="token-picker"><button className="token-active">TON</button></div>
-              <div className="quote-total">
-                <span>You pay approximately</span>
-                <strong>{quotedTonAmount ? `${quotedTonAmount} TON` : "Waiting for live quote"}</strong>
-                <small>
-                  {quoteStatus === "live"
-                    ? `Live mainnet quote from ${quote?.resolverName}`
-                    : quoteStatus === "loading"
-                      ? "Requesting a fixed-output quote from Omniston..."
-                      : quoteError || "Live route currently unavailable."}
-                </small>
+            {isMerchantShareMode ? (
+              <div className="panel merchant-share-panel">
+                <div className="panel-title"><Link2 size={20} /> Share this payment link</div>
+                <p className="muted">
+                  You created the invoice. Do not approve payment from this screen unless you are testing as the payer.
+                  Send the checkout link to the customer; the customer pays TON and gas, while this merchant wallet receives USDT.
+                </p>
+                <div className="merchant-share-actions">
+                  <button className="primary-action" onClick={() => copyPaymentLink(activeInvoice)}>
+                    {copied === activeInvoice.id ? <Check size={18} /> : <Copy size={18} />}
+                    {copied === activeInvoice.id ? "Web checkout copied" : "Copy web checkout"}
+                  </button>
+                  <button className="secondary-action" onClick={() => shareTelegramPaymentLink(activeInvoice)}>
+                    {copied === `telegram:${activeInvoice.id}` ? <Check size={18} /> : <Send size={18} />}
+                    {copied === `telegram:${activeInvoice.id}` ? "Telegram checkout copied" : "Copy Telegram checkout"}
+                  </button>
+                </div>
               </div>
-              <button className="primary-action" disabled={!isConnectionRestored || activeInvoice.status === "paid" || !quote || ["building", "awaiting-signature", "tracking"].includes(paymentStatus)} onClick={beginPayment}>
-                <Wallet size={18} />
-                {!isConnectionRestored ? "Loading wallet..." : activeInvoice.status === "paid" ? "Payment completed" : paymentStatus === "building" ? "Building transaction..." : paymentStatus === "awaiting-signature" ? "Approve in wallet..." : paymentStatus === "tracking" ? "Tracking on-chain..." : "Connect and approve payment"}
-              </button>
-              {paymentError && <p className="error-text">{paymentError}</p>}
-              {outgoingTxHash && <p className="success-text">Outgoing transaction: {outgoingTxHash}</p>}
-            </div>
+            ) : (
+              <div className="panel">
+                <div className="panel-title"><Wallet size={20} /> Pay with TON</div>
+                <div className="token-picker"><button className="token-active">TON</button></div>
+                <div className="quote-total">
+                  <span>You pay approximately</span>
+                  <strong>{quotedTonAmount ? `${quotedTonAmount} TON` : "Waiting for live quote"}</strong>
+                  <small>
+                    {quoteStatus === "live"
+                      ? `Live mainnet quote from ${quote?.resolverName}`
+                      : quoteStatus === "loading"
+                        ? "Requesting a fixed-output quote from Omniston..."
+                        : quoteError || "Live route currently unavailable."}
+                  </small>
+                </div>
+                <button className="primary-action" disabled={!isConnectionRestored || activeInvoice.status === "paid" || !quote || ["building", "awaiting-signature", "tracking"].includes(paymentStatus)} onClick={beginPayment}>
+                  <Wallet size={18} />
+                  {!isConnectionRestored ? "Loading wallet..." : activeInvoice.status === "paid" ? "Payment completed" : paymentStatus === "building" ? "Building transaction..." : paymentStatus === "awaiting-signature" ? "Approve in wallet..." : paymentStatus === "tracking" ? "Tracking on-chain..." : "Connect and approve payment"}
+                </button>
+                {paymentError && <p className="error-text">{paymentError}</p>}
+                {outgoingTxHash && <p className="success-text">Outgoing transaction: {outgoingTxHash}</p>}
+              </div>
+            )}
 
             <div className="panel">
               <div className="panel-title"><BarChart3 size={20} /> Smart route</div>
