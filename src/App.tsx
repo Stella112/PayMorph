@@ -27,6 +27,8 @@ import {
 } from "lucide-react";
 import {
   buildTonPaymentTransaction,
+  hexBocToBase64,
+  normalizeTonAddress,
   trackTonSwap,
   unitsToDecimal,
   useLiveTonToUsdtQuote,
@@ -136,6 +138,7 @@ export default function App() {
   const isConnectionRestored = useIsConnectionRestored();
   const walletAddress = useTonAddress();
   const wallet = useTonWallet();
+  const rawWalletAddress = wallet?.account.address || walletAddress;
   const omniston = useOmniston();
 
   useEffect(() => {
@@ -317,16 +320,17 @@ Reference context: ${MIRA_CONTEXT_URL}`;
   }, [quote?.quoteId, quote?.inputUnits, quote?.outputUnits, routeCount, slippagePercent, view]);
 
   function createInvoice() {
-    if (!form.merchantAddress && !walletAddress) {
+    if (!form.merchantAddress && !rawWalletAddress) {
       setPaymentError("Connect the merchant wallet or paste its TON address.");
       return;
     }
+    const merchantAddress = normalizeTonAddress(form.merchantAddress || rawWalletAddress);
     const invoice: Invoice = {
       id: `PM-${Math.random().toString(36).slice(2, 8).toUpperCase()}`,
       description: form.description,
       amount: form.amount,
       receiveToken: "USDT",
-      merchantAddress: form.merchantAddress || walletAddress,
+      merchantAddress,
       createdAt: new Date().toISOString(),
       status: "pending",
     };
@@ -338,7 +342,7 @@ Reference context: ${MIRA_CONTEXT_URL}`;
   }
 
   function createSchedule() {
-    const merchantAddress = scheduleForm.merchantAddress || walletAddress;
+    const merchantAddress = normalizeTonAddress(scheduleForm.merchantAddress || rawWalletAddress);
     const amount = Number(scheduleForm.amount);
     const nextRun = new Date(scheduleForm.nextRunAt);
     if (!scheduleForm.description.trim()) {
@@ -448,7 +452,7 @@ Reference context: ${MIRA_CONTEXT_URL}`;
       tonConnectUI.openModal();
       return;
     }
-    if (!walletAddress || !wallet) {
+    if (!rawWalletAddress || !wallet) {
       setPaymentError("Connect a TON mainnet wallet first.");
       return;
     }
@@ -470,8 +474,8 @@ Reference context: ${MIRA_CONTEXT_URL}`;
       const transaction = await buildTonPaymentTransaction(
         omniston,
         quote.quoteId,
-        walletAddress,
-        activeInvoice.merchantAddress,
+        rawWalletAddress,
+        normalizeTonAddress(activeInvoice.merchantAddress),
       );
 
       setPaymentStatus("awaiting-signature");
@@ -481,8 +485,8 @@ Reference context: ${MIRA_CONTEXT_URL}`;
         messages: transaction.messages.map((message) => ({
           address: message.targetAddress,
           amount: message.sendAmount,
-          payload: message.payload,
-          stateInit: message.jettonWalletStateInit,
+          payload: hexBocToBase64(message.payload),
+          stateInit: hexBocToBase64(message.jettonWalletStateInit),
         })),
       });
 
@@ -490,7 +494,7 @@ Reference context: ${MIRA_CONTEXT_URL}`;
       const tracker = trackTonSwap(
         omniston,
         quote.quoteId,
-        walletAddress,
+        rawWalletAddress,
         signed.boc,
         (progress) => {
           setOutgoingTxHash(progress.outgoingTxHash);

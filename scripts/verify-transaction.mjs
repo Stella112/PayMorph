@@ -1,9 +1,24 @@
 import { Omniston } from "@ston-fi/omniston-sdk";
 
 const omniston = new Omniston({ apiUrl: "wss://omni-ws.ston.fi" });
-const walletAddress = process.argv[2] || process.env.PAYMORPH_TEST_ADDRESS;
+const walletAddress = normalizeTonAddress(process.argv[2] || process.env.PAYMORPH_TEST_ADDRESS || "");
 const outputUnits = process.argv[3] || "10000";
 const tonAddress = (value) => ({ chain: { $case: "ton", value } });
+
+function normalizeTonAddress(value) {
+  const trimmed = value.trim();
+  if (!trimmed || trimmed.includes(":")) return trimmed;
+
+  try {
+    const bytes = Buffer.from(trimmed.replace(/-/g, "+").replace(/_/g, "/"), "base64");
+    if (bytes.length !== 36) return trimmed;
+    const workchain = bytes[1] === 255 ? -1 : bytes[1];
+    const hash = bytes.subarray(2, 34).toString("hex");
+    return `${workchain}:${hash}`;
+  } catch {
+    return trimmed;
+  }
+}
 
 if (!walletAddress) {
   console.error(

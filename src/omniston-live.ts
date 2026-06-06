@@ -27,9 +27,46 @@ const usdtAsset = {
   },
 };
 
-const tonAddress = (value: string) => ({
-  chain: { $case: "ton" as const, value },
+export const tonAddress = (value: string) => ({
+  chain: { $case: "ton" as const, value: normalizeTonAddress(value) },
 });
+
+function base64UrlToBytes(value: string) {
+  const normalized = value.replace(/-/g, "+").replace(/_/g, "/");
+  const padded = normalized.padEnd(Math.ceil(normalized.length / 4) * 4, "=");
+  const binary = atob(padded);
+  return Uint8Array.from(binary, (character) => character.charCodeAt(0));
+}
+
+export function normalizeTonAddress(value: string) {
+  const trimmed = value.trim();
+  if (!trimmed || trimmed.includes(":")) return trimmed;
+
+  try {
+    const bytes = base64UrlToBytes(trimmed);
+    if (bytes.length !== 36) return trimmed;
+
+    const workchain = bytes[1] === 255 ? -1 : bytes[1];
+    const hash = Array.from(bytes.slice(2, 34))
+      .map((byte) => byte.toString(16).padStart(2, "0"))
+      .join("");
+
+    return `${workchain}:${hash}`;
+  } catch {
+    return trimmed;
+  }
+}
+
+export function hexBocToBase64(value?: string) {
+  const trimmed = value?.trim();
+  if (!trimmed) return undefined;
+  if (!/^[\da-f]+$/i.test(trimmed) || trimmed.length % 2 !== 0) return trimmed;
+
+  const bytes = trimmed.match(/.{2}/g) || [];
+  let binary = "";
+  for (const byte of bytes) binary += String.fromCharCode(Number.parseInt(byte, 16));
+  return btoa(binary);
+}
 
 function decimalToUnits(value: string, decimals: number) {
   const [whole = "0", fraction = ""] = value.trim().split(".");
@@ -137,4 +174,3 @@ export function trackTonSwap(
       error: (reason) => onError(reason.message),
     });
 }
-
