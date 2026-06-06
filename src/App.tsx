@@ -700,6 +700,40 @@ Best observed rate: ${bestObserved ? (bestObserved.outputUsdt / bestObserved.inp
 Total USDT settled: ${paidRecords.reduce((sum, record) => sum + record.outputUsdt, 0).toFixed(4)}
 
 Use this memory when I ask about future PayMorph routes. Explain whether new quotes are better or worse than my history.`;
+  const totalSettledUsdt = paidRecords.reduce((sum, record) => sum + record.outputUsdt, 0);
+  const recentSettlements =
+    paidRecords
+      .slice(0, 5)
+      .map(
+        (record) =>
+          `- ${record.invoiceId}: merchant received ${record.outputUsdt.toFixed(4)} USDT; customer paid ${record.inputTon.toFixed(6)} TON through ${record.resolver}; slippage ${record.slippagePercent.toFixed(2)}%`,
+      )
+      .join("\n") || "- No paid settlements yet";
+  const miraStrategyPrompt = `Mira, act as the PayMorph ForgeLens Strategy Agent.
+
+Reference context: ${MIRA_CONTEXT_URL}
+
+Goal:
+Help a beginner merchant decide what to do after receiving PayMorph payments. Keep this educational, conservative, and wallet-approved.
+
+Current PayMorph treasury snapshot:
+- Completed on-chain payments: ${paidRecords.length}
+- Total USDT settled: ${totalSettledUsdt.toFixed(4)}
+- Live Omniston route observations: ${quoteRecords.length}
+- Average observed TON to USDT rate: ${averageRate ? averageRate.toFixed(4) : "No history yet"}
+- Best observed TON to USDT rate: ${bestObserved ? (bestObserved.outputUsdt / bestObserved.inputTon).toFixed(4) : "No history yet"}
+- Active invoice schedules: ${schedules.filter((schedule) => schedule.active).length}
+
+Recent settlements:
+${recentSettlements}
+
+Create a beginner-first TON treasury strategy with:
+1. A low-risk default allocation for received USDT.
+2. When it may make sense to swap a small portion to TON through STON.fi Omniston.
+3. Risks to explain before any wallet approval.
+4. A simple next action I can take inside PayMorph.
+
+Important: do not claim funds can move automatically. PayMorph should only prepare strategy and checkout/swap context; every real transaction must be approved by the wallet owner.`;
   const miraDashboardPrompt = `Mira, summarize my PayMorph payment operations.
 
 Reference context: ${MIRA_CONTEXT_URL}
@@ -948,6 +982,7 @@ Help me review upcoming collections, explain route risks, and draft reminders. N
           <section className="stats">
             <article><span>Live observations</span><strong>{quoteRecords.length}</strong></article>
             <article><span>Paid settlements</span><strong>{paidRecords.length}</strong></article>
+            <article><span>Total settled</span><strong>{totalSettledUsdt.toFixed(2)} USDT</strong></article>
             <article><span>Average USDT per TON</span><strong>{averageRate ? averageRate.toFixed(3) : "-"}</strong></article>
           </section>
 
@@ -992,6 +1027,32 @@ Help me review upcoming collections, explain route risks, and draft reminders. N
               </button>
               <button className="primary-action" onClick={() => copyMiraContext(miraMemoryPrompt, "memory-mira")}>
                 {copied === "memory-mira" ? "Prompt copied" : "Copy Mira prompt"} <Copy size={17} />
+              </button>
+            </div>
+          </section>
+
+          <section className="grid strategy-grid">
+            <div className="panel strategy-panel">
+              <div className="panel-title"><Sparkles size={20} /> ForgeLens Strategy Agent</div>
+              <p>
+                Turn paid invoices into a beginner-friendly treasury plan. Mira can explain whether to keep
+                funds in USDT, watch for a better STON.fi route, or prepare a tiny wallet-approved TON swap.
+              </p>
+              <div className="strategy-steps">
+                <article><strong>1</strong><span>Review settled USDT and route history</span></article>
+                <article><strong>2</strong><span>Suggest a conservative TON treasury action</span></article>
+                <article><strong>3</strong><span>Require wallet approval before any transaction</span></article>
+              </div>
+            </div>
+
+            <div className="panel">
+              <div className="panel-title"><Bot size={20} /> Mira strategy handoff</div>
+              <textarea readOnly value={miraStrategyPrompt} />
+              <button
+                className="primary-action"
+                onClick={() => copyMiraContext(miraStrategyPrompt, "strategy-mira")}
+              >
+                {copied === "strategy-mira" ? "Prompt copied" : "Copy Mira strategy prompt"} <Copy size={17} />
               </button>
             </div>
           </section>

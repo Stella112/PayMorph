@@ -176,7 +176,7 @@ textarea {
 
 .stats {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
+  grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
   gap: 12px;
   margin: 18px 0;
 }
@@ -713,6 +713,45 @@ textarea {
   grid-template-columns: minmax(0, 1.1fr) minmax(330px, 0.9fr);
 }
 
+.strategy-grid {
+  grid-template-columns: minmax(0, 0.9fr) minmax(340px, 1.1fr);
+}
+
+.strategy-panel p {
+  margin-bottom: 18px;
+}
+
+.strategy-steps {
+  display: grid;
+  gap: 10px;
+}
+
+.strategy-steps article {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 10px;
+  align-items: center;
+  padding: 12px;
+  border: 1px solid rgba(88, 240, 189, 0.16);
+  border-radius: 8px;
+  background: rgba(88, 240, 189, 0.05);
+}
+
+.strategy-steps strong {
+  display: grid;
+  width: 30px;
+  height: 30px;
+  place-items: center;
+  border-radius: 7px;
+  color: #001b12;
+  background: #58f0bd;
+}
+
+.strategy-steps span {
+  color: #d8f8ff;
+  line-height: 1.4;
+}
+
 .rate-chart {
   display: grid;
   grid-template-columns: repeat(12, minmax(18px, 1fr));
@@ -920,7 +959,6 @@ textarea {
 
   .form-grid,
   .metrics,
-  .stats,
   .agent-status-grid {
     grid-template-columns: 1fr;
   }
