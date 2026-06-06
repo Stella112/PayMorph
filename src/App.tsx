@@ -423,15 +423,14 @@ Explain the conversion, wallet approval, network fees, and what the payer should
     setTimeout(() => setCopied(""), 1500);
   }
 
-  async function openMiraWithPrompt(prompt: string, copiedKey: string) {
+  async function copyMiraContext(prompt: string, copiedKey: string) {
     try {
       await navigator.clipboard.writeText(prompt);
       setCopied(copiedKey);
       setTimeout(() => setCopied(""), 1500);
-      window.open("https://t.me/mira", "_blank", "noopener,noreferrer");
     } catch (reason) {
       setPaymentError(
-        `Copy this prompt manually, then open Mira: ${reason instanceof Error ? reason.message : String(reason)}`,
+        `Copy this prompt manually, then send it to Mira: ${reason instanceof Error ? reason.message : String(reason)}`,
       );
     }
   }
@@ -687,8 +686,8 @@ Help me review upcoming collections, explain route risks, and draft reminders. N
           <section className="panel">
             <div className="section-heading">
               <div className="panel-title"><ReceiptText size={20} /> Payment links</div>
-              <button className="secondary-link" onClick={() => openMiraWithPrompt(miraDashboardPrompt, "dashboard-mira")}>
-                {copied === "dashboard-mira" ? "Prompt copied" : "Ask Mira for summary"} <ExternalLink size={16} />
+              <button className="secondary-link" onClick={() => copyMiraContext(miraDashboardPrompt, "dashboard-mira")}>
+                {copied === "dashboard-mira" ? "Prompt copied" : "Copy Mira summary"} <Copy size={16} />
               </button>
             </div>
             <div className="invoice-list">
@@ -768,8 +767,8 @@ Help me review upcoming collections, explain route risks, and draft reminders. N
                 {copied === "agent-memory" ? <Check size={18} /> : <Copy size={18} />}
                 {copied === "agent-memory" ? "Copied" : "Copy agent summary"}
               </button>
-              <button className="primary-action" onClick={() => openMiraWithPrompt(miraAgentPrompt, "agent-mira")}>
-                {copied === "agent-mira" ? "Prompt copied" : "Copy prompt and open Mira"} <ExternalLink size={17} />
+              <button className="primary-action" onClick={() => copyMiraContext(miraAgentPrompt, "agent-mira")}>
+                {copied === "agent-mira" ? "Prompt copied" : "Copy Mira prompt"} <Copy size={17} />
               </button>
             </div>
           </section>
@@ -869,8 +868,8 @@ Help me review upcoming collections, explain route risks, and draft reminders. N
                 {copied === "memory" ? <Check size={18} /> : <Copy size={18} />}
                 {copied === "memory" ? "Copied" : "Copy memory summary"}
               </button>
-              <button className="primary-action" onClick={() => openMiraWithPrompt(miraMemoryPrompt, "memory-mira")}>
-                {copied === "memory-mira" ? "Prompt copied" : "Copy prompt and open Mira"} <ExternalLink size={17} />
+              <button className="primary-action" onClick={() => copyMiraContext(miraMemoryPrompt, "memory-mira")}>
+                {copied === "memory-mira" ? "Prompt copied" : "Copy Mira prompt"} <Copy size={17} />
               </button>
             </div>
           </section>
@@ -905,8 +904,8 @@ Help me review upcoming collections, explain route risks, and draft reminders. N
             <div className="mira-card">
               <Bot size={22} />
               <div><strong>Create with Mira</strong><span>Ask: "Create a 0.01 USDT PayMorph request."</span></div>
-              <button onClick={() => openMiraWithPrompt(miraCreatePrompt, "create-mira")}>
-                {copied === "create-mira" ? "Prompt copied" : "Open Mira"}
+              <button onClick={() => copyMiraContext(miraCreatePrompt, "create-mira")}>
+                {copied === "create-mira" ? "Prompt copied" : "Copy Mira prompt"}
               </button>
             </div>
           </div>
@@ -967,8 +966,8 @@ Help me review upcoming collections, explain route risks, and draft reminders. N
                 <div><span>Routes</span><strong>{routeCount || "-"}</strong></div>
               </div>
               <p>{quote ? "Fixed-output quote: the merchant receives the requested USDT amount after fees." : "Waiting for a real Omniston route."}</p>
-              <button className="secondary-link" onClick={() => openMiraWithPrompt(miraPrompt, "route-mira")}>
-                {copied === "route-mira" ? "Prompt copied" : "Ask Mira to explain"} <ExternalLink size={16} />
+              <button className="secondary-link" onClick={() => copyMiraContext(miraPrompt, "route-mira")}>
+                {copied === "route-mira" ? "Prompt copied" : "Copy Mira explanation"} <Copy size={16} />
               </button>
             </div>
           </section>
@@ -981,11 +980,12 @@ Help me review upcoming collections, explain route risks, and draft reminders. N
             </div>
             <div className="panel">
               <div className="panel-title"><Bot size={20} /> Ask Mira</div>
+              <p className="muted">Copy the prompt, then switch to Mira and paste it when you are ready.</p>
               <div className="question-list">
                 {["Explain this live route and its fees", "Is this slippage reasonable?", "What should I verify before signing?", "Write a reminder for this invoice"].map((question) => <div key={question}>{question}</div>)}
               </div>
-              <button className="primary-action" onClick={() => openMiraWithPrompt(miraPrompt, "pay-mira")}>
-                {copied === "pay-mira" ? "Prompt copied" : "Copy prompt and open Mira"} <ExternalLink size={17} />
+              <button className="primary-action" onClick={() => copyMiraContext(miraPrompt, "pay-mira")}>
+                {copied === "pay-mira" ? "Prompt copied" : "Copy Mira prompt"} <Copy size={17} />
               </button>
             </div>
           </section>
