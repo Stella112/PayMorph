@@ -27,6 +27,7 @@ import {
 } from "lucide-react";
 import {
   buildTonPaymentTransaction,
+  fetchFreshTonToUsdtQuote,
   hexBocToBase64,
   normalizeTonAddress,
   trackTonSwap,
@@ -471,9 +472,13 @@ Reference context: ${MIRA_CONTEXT_URL}`;
 
     try {
       setPaymentStatus("building");
+      const freshQuote = await fetchFreshTonToUsdtQuote(omniston, activeInvoice.amount);
+      const freshQuotedTonAmount = unitsToDecimal(freshQuote.inputUnits, 9, 6);
+      const freshSwapData =
+        freshQuote.settlementData.$case === "swap" ? freshQuote.settlementData.value : null;
       const transaction = await buildTonPaymentTransaction(
         omniston,
-        quote.quoteId,
+        freshQuote.quoteId,
         rawWalletAddress,
         normalizeTonAddress(activeInvoice.merchantAddress),
       );
@@ -493,7 +498,7 @@ Reference context: ${MIRA_CONTEXT_URL}`;
       setPaymentStatus("tracking");
       const tracker = trackTonSwap(
         omniston,
-        quote.quoteId,
+        freshQuote.quoteId,
         rawWalletAddress,
         signed.boc,
         (progress) => {
@@ -513,11 +518,11 @@ Reference context: ${MIRA_CONTEXT_URL}`;
                 invoiceId: activeInvoice.id,
                 observedAt: new Date().toISOString(),
                 status: "paid",
-                resolver: quote.resolverName,
-                inputTon: Number(quotedTonAmount || 0),
-                outputUsdt: Number(unitsToDecimal(quote.outputUnits, 6, 6)),
-                slippagePercent: slippagePercent || 0,
-                routeCount,
+                resolver: freshQuote.resolverName,
+                inputTon: Number(freshQuotedTonAmount),
+                outputUsdt: Number(unitsToDecimal(freshQuote.outputUnits, 6, 6)),
+                slippagePercent: freshSwapData ? freshSwapData.recommendedSlippagePips / 10000 : 0,
+                routeCount: freshSwapData?.routes.length || 0,
                 outgoingTxHash: progress.outgoingTxHash,
               },
               ...current,
@@ -539,8 +544,16 @@ Reference context: ${MIRA_CONTEXT_URL}`;
       );
     } catch (reason) {
       setPaymentStatus("failed");
-      setPaymentError(reason instanceof Error ? reason.message : String(reason));
+      setPaymentError(formatPaymentError(reason));
     }
+  }
+
+  function formatPaymentError(reason: unknown) {
+    const message = reason instanceof Error ? reason.message : String(reason);
+    if (message.toLowerCase().includes("refund due to a slippage")) {
+      return "The live route moved during wallet emulation, so the swap would refund instead of settle. Wait a few seconds and try again with a fresh quote, or use a less brittle tiny test like 0.10 USDT.";
+    }
+    return message;
   }
 
   async function toggleWalletConnection() {

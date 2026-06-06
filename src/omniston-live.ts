@@ -137,6 +137,53 @@ export function useLiveTonToUsdtQuote(outputAmount: string, enabled: boolean) {
   return { quote, status, error };
 }
 
+export function fetchFreshTonToUsdtQuote(client: Omniston, outputAmount: string) {
+  return new Promise<Quote>((resolve, reject) => {
+    let settled = false;
+    let subscription: { unsubscribe: () => void } | undefined;
+    let timeout: number;
+    const finish = (result: { quote?: Quote; error?: Error }) => {
+      if (settled) return;
+      settled = true;
+      subscription?.unsubscribe();
+      window.clearTimeout(timeout);
+      if (result.quote) resolve(result.quote);
+      else reject(result.error || new Error("Omniston did not return a fresh quote."));
+    };
+    timeout = window.setTimeout(
+      () => finish({ error: new Error("Timed out while refreshing the Omniston route.") }),
+      12_000,
+    );
+
+    subscription = client
+      .requestForQuote({
+        inputAsset: tonAsset,
+        outputAsset: usdtAsset,
+        amount: { $case: "outputUnits", value: decimalToUnits(outputAmount, 6) },
+        settlementParams: [
+          {
+            params: {
+              $case: "swap",
+              value: {
+                maxPriceSlippagePips: 5000,
+                maxRoutes: 4,
+                allowRiskyRoutes: false,
+                flexibleIntegratorFee: true,
+              },
+            },
+          },
+        ],
+      })
+      .subscribe({
+        next: (event) => {
+          if (event.$case === "quoteUpdated") finish({ quote: event.value });
+          if (event.$case === "noQuote") finish({ error: new Error("Omniston did not find a fresh route.") });
+        },
+        error: (reason) => finish({ error: reason }),
+      });
+  });
+}
+
 export async function buildTonPaymentTransaction(
   client: Omniston,
   quoteId: string,
