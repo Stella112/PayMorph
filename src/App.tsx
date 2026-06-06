@@ -25,7 +25,6 @@ import {
   Pause,
   Wallet,
 } from "lucide-react";
-import { buildPaymentMiraLink } from "./omniston";
 import {
   buildTonPaymentTransaction,
   trackTonSwap,
@@ -424,6 +423,19 @@ Explain the conversion, wallet approval, network fees, and what the payer should
     setTimeout(() => setCopied(""), 1500);
   }
 
+  async function openMiraWithPrompt(prompt: string, copiedKey: string) {
+    try {
+      await navigator.clipboard.writeText(prompt);
+      setCopied(copiedKey);
+      setTimeout(() => setCopied(""), 1500);
+      window.open("https://t.me/mira", "_blank", "noopener,noreferrer");
+    } catch (reason) {
+      setPaymentError(
+        `Copy this prompt manually, then open Mira: ${reason instanceof Error ? reason.message : String(reason)}`,
+      );
+    }
+  }
+
   async function beginPayment() {
     setPaymentError("");
     setOutgoingTxHash("");
@@ -585,6 +597,25 @@ Best observed rate: ${bestObserved ? (bestObserved.outputUsdt / bestObserved.inp
 Total USDT settled: ${paidRecords.reduce((sum, record) => sum + record.outputUsdt, 0).toFixed(4)}
 
 Use this memory when I ask about future PayMorph routes. Explain whether new quotes are better or worse than my history.`;
+  const miraDashboardPrompt = `Mira, summarize my PayMorph payment operations.
+
+Total invoices: ${invoices.length}
+Pending invoices: ${invoices.filter((invoice) => invoice.status === "pending").length}
+Paid invoices: ${invoices.filter((invoice) => invoice.status === "paid").length}
+Active schedules: ${schedules.filter((schedule) => schedule.active).length}
+ForgeLens quote observations: ${quoteRecords.length}
+Completed on-chain payments: ${paidRecords.length}
+
+Help me identify what needs follow-up, which invoices are still pending, and what I should verify before asking customers to pay.`;
+  const miraCreatePrompt = `Mira, help me create a PayMorph payment request.
+
+I want a beginner-friendly TON payment link where the merchant receives USDT and the customer pays TON through STON.fi Omniston.
+
+Draft a tiny test invoice first:
+- Description: ${form.description}
+- Merchant receives: ${form.amount} USDT
+
+Explain what I should verify before sharing the link.`;
   const miraAgentPrompt = `Mira, remember and help coordinate these PayMorph payment operations.
 
 Active payment schedules: ${schedules.filter((schedule) => schedule.active).length}
@@ -656,9 +687,9 @@ Help me review upcoming collections, explain route risks, and draft reminders. N
           <section className="panel">
             <div className="section-heading">
               <div className="panel-title"><ReceiptText size={20} /> Payment links</div>
-              <a className="secondary-link" href={buildPaymentMiraLink("dashboard", "summary")} target="_blank">
-                Ask Mira for summary <ExternalLink size={16} />
-              </a>
+              <button className="secondary-link" onClick={() => openMiraWithPrompt(miraDashboardPrompt, "dashboard-mira")}>
+                {copied === "dashboard-mira" ? "Prompt copied" : "Ask Mira for summary"} <ExternalLink size={16} />
+              </button>
             </div>
             <div className="invoice-list">
               {invoices.map((invoice) => (
@@ -737,7 +768,9 @@ Help me review upcoming collections, explain route risks, and draft reminders. N
                 {copied === "agent-memory" ? <Check size={18} /> : <Copy size={18} />}
                 {copied === "agent-memory" ? "Copied" : "Copy agent summary"}
               </button>
-              <a className="primary-action" href={buildPaymentMiraLink("agents", "summary")} target="_blank">Continue in Mira <ExternalLink size={17} /></a>
+              <button className="primary-action" onClick={() => openMiraWithPrompt(miraAgentPrompt, "agent-mira")}>
+                {copied === "agent-mira" ? "Prompt copied" : "Copy prompt and open Mira"} <ExternalLink size={17} />
+              </button>
             </div>
           </section>
 
@@ -836,9 +869,9 @@ Help me review upcoming collections, explain route risks, and draft reminders. N
                 {copied === "memory" ? <Check size={18} /> : <Copy size={18} />}
                 {copied === "memory" ? "Copied" : "Copy memory summary"}
               </button>
-              <a className="primary-action" href={buildPaymentMiraLink("forgelens", "summary")} target="_blank">
-                Continue in Mira <ExternalLink size={17} />
-              </a>
+              <button className="primary-action" onClick={() => openMiraWithPrompt(miraMemoryPrompt, "memory-mira")}>
+                {copied === "memory-mira" ? "Prompt copied" : "Copy prompt and open Mira"} <ExternalLink size={17} />
+              </button>
             </div>
           </section>
 
@@ -872,7 +905,9 @@ Help me review upcoming collections, explain route risks, and draft reminders. N
             <div className="mira-card">
               <Bot size={22} />
               <div><strong>Create with Mira</strong><span>Ask: "Create a 0.01 USDT PayMorph request."</span></div>
-              <a href="https://t.me/mira?start=paymorph_create" target="_blank">Open Mira</a>
+              <button onClick={() => openMiraWithPrompt(miraCreatePrompt, "create-mira")}>
+                {copied === "create-mira" ? "Prompt copied" : "Open Mira"}
+              </button>
             </div>
           </div>
           <div className="panel form-panel">
@@ -932,7 +967,9 @@ Help me review upcoming collections, explain route risks, and draft reminders. N
                 <div><span>Routes</span><strong>{routeCount || "-"}</strong></div>
               </div>
               <p>{quote ? "Fixed-output quote: the merchant receives the requested USDT amount after fees." : "Waiting for a real Omniston route."}</p>
-              <a className="secondary-link" href={buildPaymentMiraLink(activeInvoice.id, "explain")} target="_blank">Ask Mira to explain <ExternalLink size={16} /></a>
+              <button className="secondary-link" onClick={() => openMiraWithPrompt(miraPrompt, "route-mira")}>
+                {copied === "route-mira" ? "Prompt copied" : "Ask Mira to explain"} <ExternalLink size={16} />
+              </button>
             </div>
           </section>
 
@@ -947,7 +984,9 @@ Help me review upcoming collections, explain route risks, and draft reminders. N
               <div className="question-list">
                 {["Explain this live route and its fees", "Is this slippage reasonable?", "What should I verify before signing?", "Write a reminder for this invoice"].map((question) => <div key={question}>{question}</div>)}
               </div>
-              <a className="primary-action" href={buildPaymentMiraLink(activeInvoice.id, "explain")} target="_blank">Continue in Mira <ExternalLink size={17} /></a>
+              <button className="primary-action" onClick={() => openMiraWithPrompt(miraPrompt, "pay-mira")}>
+                {copied === "pay-mira" ? "Prompt copied" : "Copy prompt and open Mira"} <ExternalLink size={17} />
+              </button>
             </div>
           </section>
         </>

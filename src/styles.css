@@ -313,8 +313,13 @@ textarea {
   font-size: 0.86rem;
 }
 
-.mira-card a {
+.mira-card button {
+  border: 0;
+  background: transparent;
   color: #7fffd4;
+  cursor: pointer;
+  font: inherit;
+  text-decoration: underline;
 }
 
 .form-panel {
