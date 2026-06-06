@@ -116,6 +116,7 @@ export default function App() {
   const [agentActivity, setAgentActivity] = useState<AgentActivity[]>(loadAgentActivity);
   const [view, setView] = useState<"dashboard" | "agents" | "forgelens" | "create" | "pay">("dashboard");
   const [activeInvoiceId, setActiveInvoiceId] = useState(seedInvoice.id);
+  const [isSharedCheckout, setIsSharedCheckout] = useState(false);
   const [copied, setCopied] = useState("");
   const [paymentStatus, setPaymentStatus] = useState<
     "idle" | "building" | "awaiting-signature" | "tracking" | "paid" | "failed"
@@ -219,6 +220,7 @@ export default function App() {
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
+    const checkoutMatch = window.location.pathname.match(/^\/pay\/([^/]+)\/?$/);
     const telegramLaunch = parsePayMorphStartParam(readTelegramStartParam());
     if (telegramLaunch?.action === "create") {
       setView("create");
@@ -244,7 +246,7 @@ export default function App() {
       return;
     }
 
-    const invoiceId = params.get("pay");
+    const invoiceId = params.get("pay") || (checkoutMatch ? decodeURIComponent(checkoutMatch[1]) : "");
     if (invoiceId) {
       const linkedInvoice = invoices.find((invoice) => invoice.id === invoiceId);
       if (!linkedInvoice && params.get("amount") && params.get("merchant")) {
@@ -260,6 +262,7 @@ export default function App() {
         setInvoices((current) => [importedInvoice, ...current]);
       }
       setActiveInvoiceId(invoiceId);
+      setIsSharedCheckout(Boolean(checkoutMatch));
       setView("pay");
     }
     if (params.get("source") === "mira") {
@@ -399,12 +402,11 @@ Reference context: ${MIRA_CONTEXT_URL}`;
 
   async function copyPaymentLink(invoice: Invoice) {
     const params = new URLSearchParams({
-      pay: invoice.id,
       amount: invoice.amount,
       merchant: invoice.merchantAddress,
       description: invoice.description,
     });
-    const link = `${window.location.origin}${window.location.pathname}?${params.toString()}`;
+    const link = `${window.location.origin}/pay/${encodeURIComponent(invoice.id)}?${params.toString()}`;
     await navigator.clipboard.writeText(link);
     setCopied(invoice.id);
     setTimeout(() => setCopied(""), 1500);
@@ -955,7 +957,11 @@ Help me review upcoming collections, explain route risks, and draft reminders. N
       {view === "pay" && activeInvoice && (
         <>
           <section className="pay-header">
-            <button className="back-button" onClick={() => setView("dashboard")}><ArrowLeft size={17} /> Dashboard</button>
+            {isSharedCheckout ? (
+              <div className="checkout-brand"><img src="/paymorph-logo.png" alt="" /> PayMorph checkout</div>
+            ) : (
+              <button className="back-button" onClick={() => setView("dashboard")}><ArrowLeft size={17} /> Dashboard</button>
+            )}
             <div className="eyebrow"><ShieldCheck size={16} /> Live mainnet · wallet-approved payment</div>
             <h2>{activeInvoice.description}</h2>
             <div className="requested-amount"><span>Merchant receives</span><strong>{activeInvoice.amount} USDT</strong><small>To {shortAddress(activeInvoice.merchantAddress)}</small></div>

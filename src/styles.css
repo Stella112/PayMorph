@@ -331,6 +331,25 @@ textarea {
   padding: 38px 0 10px;
 }
 
+.checkout-brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 9px;
+  min-height: 42px;
+  padding: 0 12px;
+  border: 1px solid rgba(88, 240, 189, 0.22);
+  border-radius: 8px;
+  color: #d8f8ff;
+  background: rgba(255, 255, 255, 0.04);
+  font-weight: 800;
+}
+
+.checkout-brand img {
+  width: 26px;
+  height: 26px;
+  border-radius: 6px;
+}
+
 .requested-amount,
 .quote-total {
   display: grid;
