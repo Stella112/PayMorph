@@ -288,7 +288,25 @@ export default function App() {
   const swapData = quote?.settlementData.$case === "swap" ? quote.settlementData.value : null;
   const slippagePercent = swapData ? swapData.recommendedSlippagePips / 10000 : null;
   const routeCount = swapData?.routes.length || 0;
-  const miraPrompt = quote
+  const activePaidRecord = forgeLensRecords.find(
+    (record) => record.status === "paid" && record.invoiceId === activeInvoice?.id,
+  );
+  const activeOutgoingTxHash = outgoingTxHash || activePaidRecord?.outgoingTxHash || "";
+  const miraPrompt = activeInvoice?.status === "paid"
+    ? `Mira, explain this completed PayMorph payment receipt in beginner-friendly language.
+
+Reference context: ${MIRA_CONTEXT_URL}
+
+Invoice: ${activeInvoice.id}
+Merchant receives: ${activePaidRecord?.outputUsdt.toFixed(6) || activeInvoice.amount} USDT
+Customer paid: ${activePaidRecord?.inputTon.toFixed(6) || "confirmed"} TON
+Resolver: ${activePaidRecord?.resolver || "STON.fi Omniston"}
+Recommended slippage: ${activePaidRecord ? activePaidRecord.slippagePercent.toFixed(2) : "recorded"}%
+Routes: ${activePaidRecord?.routeCount || "recorded"}
+Outgoing transaction: ${activeOutgoingTxHash || "shown in PayMorph"}
+
+Explain that the payer approved the TON transaction, STON.fi Omniston handled the route, and PayMorph only marks it complete after on-chain settlement confirmation.`
+    : quote
     ? `Mira, explain this live PayMorph mainnet payment in beginner-friendly language.
 
 Reference context: ${MIRA_CONTEXT_URL}
@@ -586,7 +604,9 @@ Reference context: ${MIRA_CONTEXT_URL}`;
   const currentRate =
     quote && quotedTonAmount ? Number(unitsToDecimal(quote.outputUnits, 6, 6)) / Number(quotedTonAmount) : 0;
   const routeSignal =
-    !quote
+    activeInvoice?.status === "paid"
+      ? "settled"
+      : !quote
       ? "waiting"
       : slippagePercent !== null && slippagePercent > 1
         ? "risk"
@@ -1031,18 +1051,21 @@ Help me review upcoming collections, explain route risks, and draft reminders. N
 
             <div className="panel">
               <div className="panel-title"><BarChart3 size={20} /> Smart route</div>
-              <div className="winner"><span>{quote ? quote.resolverName : "Omniston mainnet"}</span><strong>{quoteStatus === "live" ? "Live quote" : quoteStatus}</strong></div>
+              <div className="winner">
+                <span>{activeInvoice.status === "paid" ? activePaidRecord?.resolver || "STON.fi Omniston" : quote ? quote.resolverName : "Omniston mainnet"}</span>
+                <strong>{activeInvoice.status === "paid" ? "Settled" : quoteStatus === "live" ? "Live quote" : quoteStatus}</strong>
+              </div>
               <div className={`route-signal signal-${routeSignal}`}>
-                {routeSignal === "favorable" ? "Route Guardian: favorable vs history" : routeSignal === "risk" ? "Risk Guard: review before signing" : routeSignal === "waiting" ? "Route Guardian: waiting" : "Route Guardian: normal conditions"}
+                {routeSignal === "settled" ? "Route Guardian: payment settled" : routeSignal === "favorable" ? "Route Guardian: favorable vs history" : routeSignal === "risk" ? "Risk Guard: review before signing" : routeSignal === "waiting" ? "Route Guardian: waiting" : "Route Guardian: normal conditions"}
               </div>
               <div className="metrics">
-                <div><span>Merchant receives</span><strong>{quote ? unitsToDecimal(quote.outputUnits, 6, 6) : "-"} USDT</strong></div>
-                <div><span>Recommended slippage</span><strong>{slippagePercent === null ? "-" : `${slippagePercent.toFixed(2)}%`}</strong></div>
-                <div><span>Routes</span><strong>{routeCount || "-"}</strong></div>
+                <div><span>Merchant receives</span><strong>{activeInvoice.status === "paid" ? activePaidRecord?.outputUsdt.toFixed(4) || activeInvoice.amount : quote ? unitsToDecimal(quote.outputUnits, 6, 6) : "-"} USDT</strong></div>
+                <div><span>Recommended slippage</span><strong>{activeInvoice.status === "paid" ? activePaidRecord ? `${activePaidRecord.slippagePercent.toFixed(2)}%` : "recorded" : slippagePercent === null ? "-" : `${slippagePercent.toFixed(2)}%`}</strong></div>
+                <div><span>Routes</span><strong>{activeInvoice.status === "paid" ? activePaidRecord?.routeCount || "recorded" : routeCount || "-"}</strong></div>
               </div>
-              <p>{quote ? "Fixed-output quote: the merchant receives the requested USDT amount after fees." : "Waiting for a real Omniston route."}</p>
+              <p>{activeInvoice.status === "paid" ? "Settlement confirmed: PayMorph marked this invoice paid after Omniston reported the trade as fully filled." : quote ? "Fixed-output quote: the merchant receives the requested USDT amount after fees." : "Waiting for a real Omniston route."}</p>
               <button className="secondary-link" onClick={() => copyMiraContext(miraPrompt, "route-mira")}>
-                {copied === "route-mira" ? "Prompt copied" : "Copy Mira explanation"} <Copy size={16} />
+                {copied === "route-mira" ? "Prompt copied" : activeInvoice.status === "paid" ? "Copy Mira receipt" : "Copy Mira explanation"} <Copy size={16} />
               </button>
             </div>
           </section>
