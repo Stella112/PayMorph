@@ -959,6 +959,20 @@ Help me review upcoming collections, explain route risks, and draft reminders. N
             <div className="eyebrow"><ShieldCheck size={16} /> Live mainnet · wallet-approved payment</div>
             <h2>{activeInvoice.description}</h2>
             <div className="requested-amount"><span>Merchant receives</span><strong>{activeInvoice.amount} USDT</strong><small>To {shortAddress(activeInvoice.merchantAddress)}</small></div>
+            <div className="invoice-share-actions">
+              <button onClick={() => copyPaymentLink(activeInvoice)}>
+                {copied === activeInvoice.id ? <Check size={17} /> : <Copy size={17} />}
+                {copied === activeInvoice.id ? "Web link copied" : "Copy web link"}
+              </button>
+              <button onClick={() => shareTelegramPaymentLink(activeInvoice)}>
+                {copied === `telegram:${activeInvoice.id}` ? <Check size={17} /> : <Send size={17} />}
+                {copied === `telegram:${activeInvoice.id}` ? "Telegram link copied" : "Copy Telegram link"}
+              </button>
+              <button onClick={() => copyMiraContext(miraPrompt, "pay-header-mira")}>
+                {copied === "pay-header-mira" ? <Check size={17} /> : <Bot size={17} />}
+                {copied === "pay-header-mira" ? "Mira prompt copied" : "Copy Mira prompt"}
+              </button>
+            </div>
           </section>
 
           <section className="grid">

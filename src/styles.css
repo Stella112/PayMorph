@@ -350,6 +350,27 @@ textarea {
   font-size: clamp(2rem, 5vw, 3.3rem);
 }
 
+.invoice-share-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 18px;
+}
+
+.invoice-share-actions button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 42px;
+  padding: 0 12px;
+  border: 1px solid rgba(88, 240, 189, 0.22);
+  border-radius: 8px;
+  color: #d8f8ff;
+  background: rgba(57, 118, 144, 0.34);
+  font-weight: 700;
+}
+
 .token-picker {
   display: grid;
   grid-template-columns: repeat(4, 1fr);
