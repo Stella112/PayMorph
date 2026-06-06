@@ -1,9 +1,19 @@
 import { Omniston } from "@ston-fi/omniston-sdk";
 
 const omniston = new Omniston({ apiUrl: "wss://omni-ws.ston.fi" });
+const walletAddress = process.argv[2] || process.env.PAYMORPH_TEST_ADDRESS;
+const outputUnits = process.argv[3] || "10000";
+const tonAddress = (value) => ({ chain: { $case: "ton", value } });
+
+if (!walletAddress) {
+  console.error(
+    "Usage: npm run verify:transaction -- <mainnet-wallet-address> [output-usdt-units]",
+  );
+  process.exit(2);
+}
+
 let finished = false;
 let subscription;
-
 const finish = (exitCode = 0) => {
   if (finished) return;
   finished = true;
@@ -28,7 +38,7 @@ subscription = omniston
         },
       },
     },
-    amount: { $case: "outputUnits", value: process.argv[2] || "1000000" },
+    amount: { $case: "outputUnits", value: outputUnits },
     settlementParams: [
       {
         params: {
@@ -44,18 +54,32 @@ subscription = omniston
     ],
   })
   .subscribe({
-    next: (event) => {
-      console.log(event.$case);
-      if (event.$case === "quoteUpdated") {
+    next: async (event) => {
+      if (event.$case !== "quoteUpdated" || finished) return;
+      try {
+        const transaction = await omniston.tonBuildSwap({
+          quoteId: event.value.quoteId,
+          transferSrcAddress: tonAddress(walletAddress),
+          traderDstAddress: tonAddress(walletAddress),
+          gasExcessAddress: tonAddress(walletAddress),
+          refundSrcAddress: tonAddress(walletAddress),
+          useRecommendedSlippage: true,
+        });
+
         console.log(
           JSON.stringify({
             resolver: event.value.resolverName,
-            inputUnits: event.value.inputUnits,
-            outputUnits: event.value.outputUnits,
             quoteId: event.value.quoteId,
+            messageCount: transaction.messages.length,
+            firstTarget: transaction.messages[0]?.targetAddress,
+            firstAmount: transaction.messages[0]?.sendAmount,
+            hasPayload: Boolean(transaction.messages[0]?.payload),
           }),
         );
         finish();
+      } catch (error) {
+        console.error(error);
+        finish(1);
       }
     },
     error: (error) => {
@@ -66,7 +90,7 @@ subscription = omniston
 
 setTimeout(() => {
   if (!finished) {
-    console.error("Timed out before Omniston returned a quote.");
+    console.error("Timed out before Omniston built the transaction.");
     finish(1);
   }
-}, 15000);
+}, 20_000);

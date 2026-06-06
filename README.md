@@ -104,6 +104,22 @@ The first live route is intentionally limited to customer pays TON and merchant 
 
 For real wallet use, deploy PayMorph to a public HTTPS origin and update `public/tonconnect-manifest.json` with that origin and a public icon URL. Test only with tiny amounts.
 
+## Integration verification
+
+Verify that Omniston can return a live fixed-output route:
+
+```bash
+npm run verify:quote
+```
+
+Verify that Omniston can build an unsigned wallet-ready transaction for a real mainnet wallet address:
+
+```bash
+npm run verify:transaction -- <mainnet-wallet-address>
+```
+
+The transaction verification command does not sign or broadcast anything.
+
 ## GitHub Pages
 
 Pushes to `main` deploy automatically through `.github/workflows/deploy-pages.yml`.

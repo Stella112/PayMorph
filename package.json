@@ -6,7 +6,9 @@
   "scripts": {
     "dev": "vite --host 0.0.0.0",
     "build": "tsc && vite build",
-    "preview": "vite preview --host 0.0.0.0"
+    "preview": "vite preview --host 0.0.0.0",
+    "verify:quote": "node scripts/verify-quote.mjs 10000",
+    "verify:transaction": "node scripts/verify-transaction.mjs"
   },
   "dependencies": {
     "@ston-fi/omniston-sdk-react": "0.8.3",
