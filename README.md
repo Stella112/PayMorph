@@ -20,6 +20,27 @@ npm run dev -- --port 5182
 
 Open `http://localhost:5182`.
 
+## Telegram Mini App
+
+PayMorph detects Telegram's Mini App environment, expands into the available viewport, and supports these launch parameters:
+
+- `create`
+- `forgelens`
+- `pay_<base64url-invoice-payload>`
+
+After deploying, create a bot with `@BotFather`, set PayMorph as its Main Mini App, and add the bot username as the GitHub Actions repository variable `TELEGRAM_BOT_USERNAME`.
+
+Example links:
+
+```text
+https://t.me/your_paymorph_bot?startapp=create
+https://t.me/your_paymorph_bot?startapp=forgelens
+```
+
+The app generates invoice-specific Telegram Mini App links from the dashboard after the bot username is configured.
+
+Telegram launch data is currently used for navigation only. Before using Telegram identity for authenticated merchant actions, add a backend that validates `Telegram.WebApp.initData`.
+
 ## Mira custom skill
 
 Suggested slug: `/paymorph`
@@ -72,3 +93,13 @@ Never claim a payment or swap completed unless the user confirms it or provides 
 The first live route is intentionally limited to customer pays TON and merchant receives USDT.
 
 For real wallet use, deploy PayMorph to a public HTTPS origin and update `public/tonconnect-manifest.json` with that origin and a public icon URL. Test only with tiny amounts.
+
+## GitHub Pages
+
+Pushes to `main` deploy automatically through `.github/workflows/deploy-pages.yml`.
+
+Public URL:
+
+```text
+https://stella112.github.io/PayMorph/
+```

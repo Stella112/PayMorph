@@ -12,6 +12,7 @@ import {
   FileText,
   Gauge,
   History,
+  Send,
   Link2,
   Plus,
   ReceiptText,
@@ -27,6 +28,13 @@ import {
   useLiveTonToUsdtQuote,
 } from "./omniston-live";
 import type { ForgeLensRecord, Invoice } from "./types";
+import {
+  buildTelegramPaymentStartParam,
+  parsePayMorphStartParam,
+  readTelegramStartParam,
+} from "./telegram";
+
+const TELEGRAM_BOT_USERNAME = import.meta.env.VITE_TELEGRAM_BOT_USERNAME || "";
 
 const seedInvoice: Invoice = {
   id: "PM-DEMO",
@@ -93,6 +101,31 @@ export default function App() {
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
+    const telegramLaunch = parsePayMorphStartParam(readTelegramStartParam());
+    if (telegramLaunch?.action === "create") {
+      setView("create");
+    } else if (telegramLaunch?.action === "forgelens") {
+      setView("forgelens");
+    } else if (telegramLaunch?.action === "pay") {
+      const importedInvoice: Invoice = {
+        id: telegramLaunch.invoiceId,
+        description: telegramLaunch.description,
+        amount: telegramLaunch.amount,
+        receiveToken: "USDT",
+        merchantAddress: telegramLaunch.merchant,
+        createdAt: new Date().toISOString(),
+        status: "pending",
+      };
+      setInvoices((current) =>
+        current.some((invoice) => invoice.id === importedInvoice.id)
+          ? current
+          : [importedInvoice, ...current],
+      );
+      setActiveInvoiceId(importedInvoice.id);
+      setView("pay");
+      return;
+    }
+
     const invoiceId = params.get("pay");
     if (invoiceId) {
       const linkedInvoice = invoices.find((invoice) => invoice.id === invoiceId);
@@ -196,6 +229,23 @@ Explain the conversion, wallet approval, network fees, and what the payer should
     const link = `${window.location.origin}${window.location.pathname}?${params.toString()}`;
     await navigator.clipboard.writeText(link);
     setCopied(invoice.id);
+    setTimeout(() => setCopied(""), 1500);
+  }
+
+  async function shareTelegramPaymentLink(invoice: Invoice) {
+    if (!TELEGRAM_BOT_USERNAME) {
+      setPaymentError("Add VITE_TELEGRAM_BOT_USERNAME after creating the PayMorph Telegram bot.");
+      return;
+    }
+    const startParam = buildTelegramPaymentStartParam(
+      invoice.id,
+      invoice.amount,
+      invoice.merchantAddress,
+      invoice.description,
+    );
+    const link = `https://t.me/${TELEGRAM_BOT_USERNAME}?startapp=${encodeURIComponent(startParam)}`;
+    await navigator.clipboard.writeText(link);
+    setCopied(`telegram:${invoice.id}`);
     setTimeout(() => setCopied(""), 1500);
   }
 
@@ -384,6 +434,7 @@ Use this memory when I ask about future PayMorph routes. Explain whether new quo
                   <div className="invoice-amount"><strong>{invoice.amount} {invoice.receiveToken}</strong><span className={`status ${invoice.status}`}>{invoice.status}</span></div>
                   <div className="row-actions">
                     <button onClick={() => copyPaymentLink(invoice)} title="Copy payment link">{copied === invoice.id ? <Check size={17} /> : <Copy size={17} />}</button>
+                    <button onClick={() => shareTelegramPaymentLink(invoice)} title="Copy Telegram Mini App link">{copied === `telegram:${invoice.id}` ? <Check size={17} /> : <Send size={17} />}</button>
                     <button onClick={() => { setActiveInvoiceId(invoice.id); setPaymentStatus("idle"); setView("pay"); }} title="Open payment"><ArrowRight size={17} /></button>
                   </div>
                 </article>
