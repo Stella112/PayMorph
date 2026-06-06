@@ -31,3 +31,24 @@ export type ForgeLensRecord = {
   routeCount: number;
   outgoingTxHash?: string;
 };
+
+export type PaymentSchedule = {
+  id: string;
+  description: string;
+  amount: string;
+  merchantAddress: string;
+  cadence: "daily" | "weekly" | "monthly";
+  nextRunAt: string;
+  active: boolean;
+  lastInvoiceId?: string;
+};
+
+export type AgentActivity = {
+  id: string;
+  createdAt: string;
+  agent: "Collections Agent" | "Route Guardian" | "Risk Guard";
+  severity: "info" | "good" | "warning";
+  title: string;
+  detail: string;
+  invoiceId?: string;
+};

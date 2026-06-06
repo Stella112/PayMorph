@@ -11,6 +11,16 @@ ForgeLens is PayMorph's payment intelligence and memory layer. It:
 - records fully-filled on-chain settlements
 - prepares concise performance summaries that users can deliberately hand to Mira for conversational memory
 
+## Agentic payment operations
+
+PayMorph includes transparent, non-custodial agents:
+
+- **Collections Agent** creates recurring invoices when schedules become due and advances the next due date.
+- **Route Guardian** compares live Omniston quotes with ForgeLens history and highlights favorable conditions.
+- **Risk Guard** flags elevated slippage and keeps wallet approval mandatory.
+
+The local-first MVP runs agent checks while PayMorph is open. Always-on background scheduling requires a persistent database and Vercel Cron in a later phase.
+
 ## Run locally
 
 ```bash

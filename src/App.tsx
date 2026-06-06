@@ -4,8 +4,10 @@ import { TonConnectButton, useTonAddress, useTonConnectUI, useTonWallet } from "
 import {
   ArrowLeft,
   ArrowRight,
+  Activity,
   BarChart3,
   Bot,
+  CalendarClock,
   Check,
   Copy,
   ExternalLink,
@@ -15,9 +17,12 @@ import {
   Send,
   Link2,
   Plus,
+  Play,
   ReceiptText,
   ShieldCheck,
+  ShieldAlert,
   Sparkles,
+  Pause,
   Wallet,
 } from "lucide-react";
 import { buildPaymentMiraLink } from "./omniston";
@@ -27,7 +32,7 @@ import {
   unitsToDecimal,
   useLiveTonToUsdtQuote,
 } from "./omniston-live";
-import type { ForgeLensRecord, Invoice } from "./types";
+import type { AgentActivity, ForgeLensRecord, Invoice, PaymentSchedule } from "./types";
 import {
   buildTelegramPaymentStartParam,
   parsePayMorphStartParam,
@@ -64,6 +69,38 @@ function loadForgeLensRecords(): ForgeLensRecord[] {
   }
 }
 
+function loadSchedules(): PaymentSchedule[] {
+  try {
+    const saved = localStorage.getItem("paymorph-schedules-v1");
+    return saved ? JSON.parse(saved) : [];
+  } catch {
+    return [];
+  }
+}
+
+function loadAgentActivity(): AgentActivity[] {
+  try {
+    const saved = localStorage.getItem("paymorph-agent-activity-v1");
+    return saved ? JSON.parse(saved) : [];
+  } catch {
+    return [];
+  }
+}
+
+function advanceSchedule(date: Date, cadence: PaymentSchedule["cadence"]) {
+  const next = new Date(date);
+  if (cadence === "daily") next.setDate(next.getDate() + 1);
+  if (cadence === "weekly") next.setDate(next.getDate() + 7);
+  if (cadence === "monthly") next.setMonth(next.getMonth() + 1);
+  return next;
+}
+
+function advanceSchedulePast(date: Date, cadence: PaymentSchedule["cadence"], now: Date) {
+  let next = advanceSchedule(date, cadence);
+  while (next <= now) next = advanceSchedule(next, cadence);
+  return next;
+}
+
 function shortAddress(address: string) {
   if (!address || address.length < 15) return address || "Not connected";
   return `${address.slice(0, 7)}...${address.slice(-6)}`;
@@ -72,7 +109,9 @@ function shortAddress(address: string) {
 export default function App() {
   const [invoices, setInvoices] = useState<Invoice[]>(loadInvoices);
   const [forgeLensRecords, setForgeLensRecords] = useState<ForgeLensRecord[]>(loadForgeLensRecords);
-  const [view, setView] = useState<"dashboard" | "forgelens" | "create" | "pay">("dashboard");
+  const [schedules, setSchedules] = useState<PaymentSchedule[]>(loadSchedules);
+  const [agentActivity, setAgentActivity] = useState<AgentActivity[]>(loadAgentActivity);
+  const [view, setView] = useState<"dashboard" | "agents" | "forgelens" | "create" | "pay">("dashboard");
   const [activeInvoiceId, setActiveInvoiceId] = useState(seedInvoice.id);
   const [copied, setCopied] = useState("");
   const [paymentStatus, setPaymentStatus] = useState<
@@ -84,6 +123,13 @@ export default function App() {
     description: "Tiny PayMorph test",
     amount: "0.01",
     merchantAddress: "",
+  });
+  const [scheduleForm, setScheduleForm] = useState({
+    description: "Weekly design retainer",
+    amount: "10",
+    merchantAddress: "",
+    cadence: "weekly" as PaymentSchedule["cadence"],
+    nextRunAt: new Date(Date.now() + 60 * 60 * 1000).toISOString().slice(0, 16),
   });
 
   const [tonConnectUI] = useTonConnectUI();
@@ -98,6 +144,73 @@ export default function App() {
   useEffect(() => {
     localStorage.setItem("paymorph-forgelens-v1", JSON.stringify(forgeLensRecords));
   }, [forgeLensRecords]);
+
+  useEffect(() => {
+    localStorage.setItem("paymorph-schedules-v1", JSON.stringify(schedules));
+  }, [schedules]);
+
+  useEffect(() => {
+    localStorage.setItem("paymorph-agent-activity-v1", JSON.stringify(agentActivity));
+  }, [agentActivity]);
+
+  function logAgentActivity(activity: Omit<AgentActivity, "id" | "createdAt">) {
+    setAgentActivity((current) =>
+      [
+        {
+          ...activity,
+          id: crypto.randomUUID(),
+          createdAt: new Date().toISOString(),
+        },
+        ...current,
+      ].slice(0, 80),
+    );
+  }
+
+  function runCollectionsAgent() {
+    const now = new Date();
+    const dueSchedules = schedules.filter(
+      (schedule) => schedule.active && new Date(schedule.nextRunAt) <= now,
+    );
+    if (dueSchedules.length === 0) return;
+
+    const generatedInvoices = dueSchedules.map((schedule) => ({
+      id: `PM-${Math.random().toString(36).slice(2, 8).toUpperCase()}`,
+      description: schedule.description,
+      amount: schedule.amount,
+      receiveToken: "USDT",
+      merchantAddress: schedule.merchantAddress,
+      createdAt: now.toISOString(),
+      status: "pending" as const,
+    }));
+
+    setInvoices((current) => [...generatedInvoices, ...current]);
+    setSchedules((current) =>
+      current.map((schedule) => {
+        const generatedIndex = dueSchedules.findIndex((due) => due.id === schedule.id);
+        if (generatedIndex === -1) return schedule;
+        return {
+          ...schedule,
+          lastInvoiceId: generatedInvoices[generatedIndex].id,
+          nextRunAt: advanceSchedulePast(new Date(schedule.nextRunAt), schedule.cadence, now).toISOString(),
+        };
+      }),
+    );
+    dueSchedules.forEach((schedule, index) => {
+      logAgentActivity({
+        agent: "Collections Agent",
+        severity: "info",
+        title: "Recurring invoice created",
+        detail: `${schedule.amount} USDT invoice created for ${schedule.description}. Next ${schedule.cadence} run scheduled automatically.`,
+        invoiceId: generatedInvoices[index].id,
+      });
+    });
+  }
+
+  useEffect(() => {
+    runCollectionsAgent();
+    const timer = window.setInterval(runCollectionsAgent, 60_000);
+    return () => window.clearInterval(timer);
+  }, [schedules]);
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
@@ -217,6 +330,61 @@ Explain the conversion, wallet approval, network fees, and what the payer should
     setPaymentStatus("idle");
     setPaymentError("");
     setView("pay");
+  }
+
+  function createSchedule() {
+    const merchantAddress = scheduleForm.merchantAddress || walletAddress;
+    const amount = Number(scheduleForm.amount);
+    const nextRun = new Date(scheduleForm.nextRunAt);
+    if (!scheduleForm.description.trim()) {
+      setPaymentError("Add a description for this recurring collection.");
+      return;
+    }
+    if (!Number.isFinite(amount) || amount <= 0) {
+      setPaymentError("Enter a valid USDT amount greater than zero.");
+      return;
+    }
+    if (Number.isNaN(nextRun.getTime())) {
+      setPaymentError("Choose a valid first run date and time.");
+      return;
+    }
+    if (!merchantAddress) {
+      setPaymentError("Connect the merchant wallet or paste its TON address.");
+      return;
+    }
+    const schedule: PaymentSchedule = {
+      id: `SCH-${Math.random().toString(36).slice(2, 7).toUpperCase()}`,
+      description: scheduleForm.description.trim(),
+      amount: String(amount),
+      merchantAddress,
+      cadence: scheduleForm.cadence,
+      nextRunAt: nextRun.toISOString(),
+      active: true,
+    };
+    setSchedules((current) => [schedule, ...current]);
+    logAgentActivity({
+      agent: "Collections Agent",
+      severity: "info",
+      title: "Payment schedule activated",
+      detail: `${schedule.amount} USDT will be requested ${schedule.cadence}. First run: ${new Date(schedule.nextRunAt).toLocaleString()}.`,
+    });
+    setPaymentError("");
+  }
+
+  function toggleSchedule(scheduleId: string) {
+    setSchedules((current) =>
+      current.map((schedule) =>
+        schedule.id === scheduleId ? { ...schedule, active: !schedule.active } : schedule,
+      ),
+    );
+  }
+
+  function runScheduleNow(schedule: PaymentSchedule) {
+    setSchedules((current) =>
+      current.map((item) =>
+        item.id === schedule.id ? { ...item, active: true, nextRunAt: new Date().toISOString() } : item,
+      ),
+    );
   }
 
   async function copyPaymentLink(invoice: Invoice) {
@@ -365,6 +533,39 @@ Explain the conversion, wallet approval, network fees, and what the payer should
       !best || record.outputUsdt / record.inputTon > best.outputUsdt / best.inputTon ? record : best,
     null,
   );
+  const currentRate =
+    quote && quotedTonAmount ? Number(unitsToDecimal(quote.outputUnits, 6, 6)) / Number(quotedTonAmount) : 0;
+  const routeSignal =
+    !quote
+      ? "waiting"
+      : slippagePercent !== null && slippagePercent > 1
+        ? "risk"
+        : averageRate && currentRate >= averageRate * 1.002
+          ? "favorable"
+          : "normal";
+
+  useEffect(() => {
+    if (!quote || !currentRate) return;
+    if (routeSignal === "favorable") {
+      logAgentActivity({
+        agent: "Route Guardian",
+        severity: "good",
+        title: "Favorable route detected",
+        detail: `Current route is ${((currentRate / averageRate - 1) * 100).toFixed(2)}% better than ForgeLens history.`,
+        invoiceId: activeInvoice.id,
+      });
+    }
+    if (routeSignal === "risk") {
+      logAgentActivity({
+        agent: "Risk Guard",
+        severity: "warning",
+        title: "High slippage warning",
+        detail: `Omniston recommends ${slippagePercent?.toFixed(2)}% slippage. Review carefully before signing.`,
+        invoiceId: activeInvoice.id,
+      });
+    }
+  }, [quote?.quoteId, routeSignal]);
+
   const miraMemoryPrompt = `Mira, remember this PayMorph ForgeLens performance summary.
 
 Live quote observations: ${quoteRecords.length}
@@ -374,6 +575,16 @@ Best observed rate: ${bestObserved ? (bestObserved.outputUsdt / bestObserved.inp
 Total USDT settled: ${paidRecords.reduce((sum, record) => sum + record.outputUsdt, 0).toFixed(4)}
 
 Use this memory when I ask about future PayMorph routes. Explain whether new quotes are better or worse than my history.`;
+  const miraAgentPrompt = `Mira, remember and help coordinate these PayMorph payment operations.
+
+Active payment schedules: ${schedules.filter((schedule) => schedule.active).length}
+Pending invoices: ${invoices.filter((invoice) => invoice.status === "pending").length}
+Completed payments: ${paidRecords.length}
+Current route signal: ${routeSignal}
+Recent automated actions:
+${agentActivity.slice(0, 5).map((activity) => `- ${activity.agent}: ${activity.title} - ${activity.detail}`).join("\n") || "- No actions yet"}
+
+Help me review upcoming collections, explain route risks, and draft reminders. Never claim a transaction completed without on-chain confirmation.`;
 
   return (
     <main className="app-shell">
@@ -385,6 +596,9 @@ Use this memory when I ask about future PayMorph routes. Explain whether new quo
         <nav>
           <button className={view === "dashboard" ? "nav-active" : ""} onClick={() => setView("dashboard")}>
             Dashboard
+          </button>
+          <button className={view === "agents" ? "nav-active" : ""} onClick={() => setView("agents")}>
+            Agents
           </button>
           <button className={view === "forgelens" ? "nav-active" : ""} onClick={() => setView("forgelens")}>
             ForgeLens
@@ -440,6 +654,109 @@ Use this memory when I ask about future PayMorph routes. Explain whether new quo
                 </article>
               ))}
             </div>
+          </section>
+        </>
+      )}
+
+      {view === "agents" && (
+        <>
+          <section className="pay-header">
+            <div className="eyebrow"><Activity size={16} /> Agentic payment operations</div>
+            <h2>Automate coordination, keep signatures human.</h2>
+            <p>
+              Collections Agent creates due invoices. Route Guardian compares Omniston routes. Risk Guard
+              flags unsafe conditions. Every fund movement still requires wallet approval.
+            </p>
+          </section>
+
+          <section className="agent-status-grid">
+            <article>
+              <CalendarClock size={21} />
+              <span>Collections Agent</span>
+              <strong>{schedules.filter((schedule) => schedule.active).length} active schedules</strong>
+              <small>Creates invoices when PayMorph is opened and a schedule is due.</small>
+            </article>
+            <article className={routeSignal === "favorable" ? "agent-good" : ""}>
+              <Gauge size={21} />
+              <span>Route Guardian</span>
+              <strong>{routeSignal === "favorable" ? "Favorable route" : routeSignal === "waiting" ? "Waiting for quote" : "Monitoring"}</strong>
+              <small>Compares live Omniston routes with ForgeLens memory.</small>
+            </article>
+            <article className={routeSignal === "risk" ? "agent-warning" : ""}>
+              <ShieldAlert size={21} />
+              <span>Risk Guard</span>
+              <strong>{routeSignal === "risk" ? "Review required" : "No active warning"}</strong>
+              <small>Flags high slippage and blocks silent execution.</small>
+            </article>
+          </section>
+
+          <section className="grid">
+            <div className="panel form-panel">
+              <div className="panel-title"><CalendarClock size={20} /> New recurring collection</div>
+              <label>Description<input value={scheduleForm.description} onChange={(event) => setScheduleForm({ ...scheduleForm, description: event.target.value })} /></label>
+              <div className="form-grid">
+                <label>Amount in USDT<input inputMode="decimal" value={scheduleForm.amount} onChange={(event) => setScheduleForm({ ...scheduleForm, amount: event.target.value })} /></label>
+                <label>Cadence<select value={scheduleForm.cadence} onChange={(event) => setScheduleForm({ ...scheduleForm, cadence: event.target.value as PaymentSchedule["cadence"] })}><option value="daily">Daily</option><option value="weekly">Weekly</option><option value="monthly">Monthly</option></select></label>
+              </div>
+              <label>First run<input type="datetime-local" value={scheduleForm.nextRunAt} onChange={(event) => setScheduleForm({ ...scheduleForm, nextRunAt: event.target.value })} /></label>
+              <label>Merchant wallet<input placeholder={walletAddress || "Connect wallet or paste address"} value={scheduleForm.merchantAddress} onChange={(event) => setScheduleForm({ ...scheduleForm, merchantAddress: event.target.value })} /></label>
+              <button className="primary-action" onClick={createSchedule}><CalendarClock size={18} /> Activate Collections Agent</button>
+              {paymentError && <p className="error-text">{paymentError}</p>}
+            </div>
+
+            <div className="panel">
+              <div className="panel-title"><Bot size={20} /> Mira operations handoff</div>
+              <textarea readOnly value={miraAgentPrompt} />
+              <button
+                className="secondary-action"
+                onClick={async () => {
+                  await navigator.clipboard.writeText(miraAgentPrompt);
+                  setCopied("agent-memory");
+                  setTimeout(() => setCopied(""), 1500);
+                }}
+              >
+                {copied === "agent-memory" ? <Check size={18} /> : <Copy size={18} />}
+                {copied === "agent-memory" ? "Copied" : "Copy agent summary"}
+              </button>
+              <a className="primary-action" href={buildPaymentMiraLink("agents", "summary")} target="_blank">Continue in Mira <ExternalLink size={17} /></a>
+            </div>
+          </section>
+
+          <section className="panel">
+            <div className="panel-title"><CalendarClock size={20} /> Payment schedules</div>
+            {schedules.length === 0 ? (
+              <p className="muted">Create a schedule to activate Collections Agent.</p>
+            ) : (
+              <div className="schedule-list">
+                {schedules.map((schedule) => (
+                  <article key={schedule.id}>
+                    <div><strong>{schedule.description}</strong><span>{schedule.id} / {schedule.cadence}</span></div>
+                    <div><strong>{schedule.amount} USDT</strong><span>Next: {new Date(schedule.nextRunAt).toLocaleString()}</span></div>
+                    <div className="row-actions">
+                      <button onClick={() => toggleSchedule(schedule.id)} title={schedule.active ? "Pause schedule" : "Resume schedule"}>{schedule.active ? <Pause size={17} /> : <Play size={17} />}</button>
+                      <button onClick={() => runScheduleNow(schedule)} title="Run now"><ArrowRight size={17} /></button>
+                    </div>
+                  </article>
+                ))}
+              </div>
+            )}
+          </section>
+
+          <section className="panel">
+            <div className="panel-title"><Activity size={20} /> Agent activity</div>
+            {agentActivity.length === 0 ? (
+              <p className="muted">Automated decisions and warnings will appear here.</p>
+            ) : (
+              <div className="activity-list">
+                {agentActivity.map((activity) => (
+                  <article className={`activity-${activity.severity}`} key={activity.id}>
+                    <div><strong>{activity.agent}</strong><span>{new Date(activity.createdAt).toLocaleString()}</span></div>
+                    <div><strong>{activity.title}</strong><span>{activity.detail}</span></div>
+                    {activity.invoiceId && <button onClick={() => { setActiveInvoiceId(activity.invoiceId!); setView("pay"); }}><ArrowRight size={17} /></button>}
+                  </article>
+                ))}
+              </div>
+            )}
           </section>
         </>
       )}
@@ -587,6 +904,9 @@ Use this memory when I ask about future PayMorph routes. Explain whether new quo
             <div className="panel">
               <div className="panel-title"><BarChart3 size={20} /> Smart route</div>
               <div className="winner"><span>{quote ? quote.resolverName : "Omniston mainnet"}</span><strong>{quoteStatus === "live" ? "Live quote" : quoteStatus}</strong></div>
+              <div className={`route-signal signal-${routeSignal}`}>
+                {routeSignal === "favorable" ? "Route Guardian: favorable vs history" : routeSignal === "risk" ? "Risk Guard: review before signing" : routeSignal === "waiting" ? "Route Guardian: waiting" : "Route Guardian: normal conditions"}
+              </div>
               <div className="metrics">
                 <div><span>Merchant receives</span><strong>{quote ? unitsToDecimal(quote.outputUnits, 6, 6) : "-"} USDT</strong></div>
                 <div><span>Recommended slippage</span><strong>{slippagePercent === null ? "-" : `${slippagePercent.toFixed(2)}%`}</strong></div>

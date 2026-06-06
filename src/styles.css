@@ -638,6 +638,123 @@ textarea {
   font-size: 0.8rem;
 }
 
+.agent-status-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 12px;
+  margin: 18px 0;
+}
+
+.agent-status-grid article {
+  display: grid;
+  gap: 8px;
+  padding: 16px;
+  border: 1px solid rgba(148, 177, 190, 0.18);
+  border-radius: 8px;
+  background: #091820;
+}
+
+.agent-status-grid article > svg {
+  color: #7bb9ff;
+}
+
+.agent-status-grid span,
+.agent-status-grid small,
+.schedule-list span,
+.activity-list span {
+  color: #91a8b5;
+}
+
+.agent-status-grid small {
+  line-height: 1.45;
+}
+
+.agent-status-grid .agent-good {
+  border-color: rgba(88, 240, 189, 0.5);
+}
+
+.agent-status-grid .agent-good > svg {
+  color: #58f0bd;
+}
+
+.agent-status-grid .agent-warning {
+  border-color: rgba(247, 213, 106, 0.6);
+}
+
+.agent-status-grid .agent-warning > svg {
+  color: #f7d56a;
+}
+
+.schedule-list,
+.activity-list {
+  display: grid;
+  gap: 8px;
+}
+
+.schedule-list article,
+.activity-list article {
+  display: grid;
+  grid-template-columns: 1.2fr 1fr auto;
+  gap: 14px;
+  align-items: center;
+  padding: 13px;
+  border: 1px solid rgba(150, 188, 201, 0.14);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.025);
+}
+
+.schedule-list span,
+.activity-list span {
+  display: block;
+  margin-top: 4px;
+  font-size: 0.82rem;
+}
+
+.activity-list article {
+  border-left: 3px solid #7bb9ff;
+}
+
+.activity-list article.activity-good {
+  border-left-color: #58f0bd;
+}
+
+.activity-list article.activity-warning {
+  border-left-color: #f7d56a;
+}
+
+.activity-list button {
+  display: grid;
+  width: 36px;
+  height: 36px;
+  place-items: center;
+  border: 1px solid rgba(150, 188, 201, 0.18);
+  border-radius: 7px;
+  color: #f3f7fb;
+  background: transparent;
+  cursor: pointer;
+}
+
+.route-signal {
+  margin-bottom: 14px;
+  padding: 9px 11px;
+  border-left: 3px solid #7bb9ff;
+  color: #cae0ff;
+  background: rgba(123, 185, 255, 0.08);
+  font-size: 0.88rem;
+}
+
+.route-signal.signal-favorable {
+  border-left-color: #58f0bd;
+  color: #7fffd4;
+  background: rgba(88, 240, 189, 0.08);
+}
+
+.route-signal.signal-risk {
+  border-left-color: #f7d56a;
+  color: #f7d56a;
+  background: rgba(247, 213, 106, 0.08);
+}
+
 @media (max-width: 820px) {
   .hero,
   .grid,
@@ -650,7 +767,8 @@ textarea {
 
   .form-grid,
   .metrics,
-  .stats {
+  .stats,
+  .agent-status-grid {
     grid-template-columns: 1fr;
   }
 
@@ -668,6 +786,11 @@ textarea {
 
   .memory-table article {
     grid-template-columns: 1fr 1fr;
+  }
+
+  .schedule-list article,
+  .activity-list article {
+    grid-template-columns: 1fr;
   }
 
   .invoice-amount {
