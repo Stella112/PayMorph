@@ -16,6 +16,8 @@ export type Invoice = {
   merchantAddress: string;
   createdAt: string;
   status: InvoiceStatus;
+  memo?: string;
+  expiresAt?: string;
   paidWith?: string;
 };
 

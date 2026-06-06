@@ -10,10 +10,10 @@ import {
   CalendarClock,
   Check,
   Copy,
-  ExternalLink,
   FileText,
   Gauge,
   History,
+  QrCode,
   Send,
   Link2,
   Plus,
@@ -110,6 +110,29 @@ function shortAddress(address: string) {
   return `${address.slice(0, 7)}...${address.slice(-6)}`;
 }
 
+function defaultExpiryValue() {
+  return new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString().slice(0, 16);
+}
+
+function isInvoiceExpired(invoice: Invoice) {
+  return Boolean(invoice.expiresAt && invoice.status !== "paid" && new Date(invoice.expiresAt) <= new Date());
+}
+
+function buildPaymentLink(invoice: Invoice) {
+  const params = new URLSearchParams({
+    amount: invoice.amount,
+    merchant: invoice.merchantAddress,
+    description: invoice.description,
+  });
+  if (invoice.memo) params.set("memo", invoice.memo);
+  if (invoice.expiresAt) params.set("expiresAt", invoice.expiresAt);
+  return `${window.location.origin}/pay/${encodeURIComponent(invoice.id)}?${params.toString()}`;
+}
+
+function qrCodeUrl(value: string) {
+  return `https://api.qrserver.com/v1/create-qr-code/?size=220x220&margin=10&data=${encodeURIComponent(value)}`;
+}
+
 export default function App() {
   const [invoices, setInvoices] = useState<Invoice[]>(loadInvoices);
   const [forgeLensRecords, setForgeLensRecords] = useState<ForgeLensRecord[]>(loadForgeLensRecords);
@@ -128,6 +151,8 @@ export default function App() {
     description: "Tiny PayMorph test",
     amount: "0.01",
     merchantAddress: "",
+    memo: "PM demo",
+    expiresAt: defaultExpiryValue(),
   });
   const [scheduleForm, setScheduleForm] = useState({
     description: "Weekly design retainer",
@@ -188,6 +213,8 @@ export default function App() {
       merchantAddress: schedule.merchantAddress,
       createdAt: now.toISOString(),
       status: "pending" as const,
+      memo: schedule.id,
+      expiresAt: new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000).toISOString(),
     }));
 
     setInvoices((current) => [...generatedInvoices, ...current]);
@@ -207,7 +234,7 @@ export default function App() {
         agent: "Collections Agent",
         severity: "info",
         title: "Recurring invoice created",
-        detail: `${schedule.amount} USDT invoice created for ${schedule.description}. Next ${schedule.cadence} run scheduled automatically.`,
+        detail: `${schedule.amount} USDT invoice link created for ${schedule.description}. No funds move until a customer approves it. Next ${schedule.cadence} run scheduled automatically.`,
         invoiceId: generatedInvoices[index].id,
       });
     });
@@ -236,6 +263,8 @@ export default function App() {
         merchantAddress: telegramLaunch.merchant,
         createdAt: new Date().toISOString(),
         status: "pending",
+        memo: telegramLaunch.memo || undefined,
+        expiresAt: telegramLaunch.expiresAt || undefined,
       };
       setInvoices((current) =>
         current.some((invoice) => invoice.id === importedInvoice.id)
@@ -260,6 +289,8 @@ export default function App() {
           merchantAddress: params.get("merchant") || "",
           createdAt: new Date().toISOString(),
           status: "pending",
+          memo: params.get("memo") || undefined,
+          expiresAt: params.get("expiresAt") || undefined,
         };
         setInvoices((current) => [importedInvoice, ...current]);
       }
@@ -278,12 +309,14 @@ export default function App() {
   }, []);
 
   const activeInvoice = invoices.find((invoice) => invoice.id === activeInvoiceId) || invoices[0];
+  const activeInvoiceExpired = activeInvoice ? isInvoiceExpired(activeInvoice) : false;
+  const activeInvoiceStatus = activeInvoiceExpired ? "expired" : activeInvoice?.status;
   const isMerchantShareMode = Boolean(
-    activeInvoice && view === "pay" && !isSharedCheckout && activeInvoice.status !== "paid",
+    activeInvoice && view === "pay" && !isSharedCheckout && activeInvoiceStatus !== "paid",
   );
   const { quote, status: quoteStatus, error: quoteError } = useLiveTonToUsdtQuote(
     activeInvoice?.amount || "0",
-    Boolean(activeInvoice && view === "pay" && activeInvoice.status !== "paid" && !isMerchantShareMode),
+    Boolean(activeInvoice && view === "pay" && activeInvoiceStatus === "pending" && !isMerchantShareMode),
   );
   const quotedTonAmount = quote ? unitsToDecimal(quote.inputUnits, 9, 6) : null;
   const swapData = quote?.settlementData.$case === "swap" ? quote.settlementData.value : null;
@@ -293,7 +326,7 @@ export default function App() {
     (record) => record.status === "paid" && record.invoiceId === activeInvoice?.id,
   );
   const activeOutgoingTxHash = outgoingTxHash || activePaidRecord?.outgoingTxHash || "";
-  const miraPrompt = activeInvoice?.status === "paid"
+  const miraPrompt = activeInvoiceStatus === "paid"
     ? `Mira, explain this completed PayMorph payment receipt in beginner-friendly language.
 
 Reference context: ${MIRA_CONTEXT_URL}
@@ -351,6 +384,10 @@ Reference context: ${MIRA_CONTEXT_URL}`;
       setPaymentError("Connect the merchant wallet or paste its TON address.");
       return;
     }
+    if (form.expiresAt && new Date(form.expiresAt) <= new Date()) {
+      setPaymentError("Choose a future expiry time for this payment link.");
+      return;
+    }
     const merchantAddress = normalizeTonAddress(form.merchantAddress || rawWalletAddress);
     const invoice: Invoice = {
       id: `PM-${Math.random().toString(36).slice(2, 8).toUpperCase()}`,
@@ -360,6 +397,8 @@ Reference context: ${MIRA_CONTEXT_URL}`;
       merchantAddress,
       createdAt: new Date().toISOString(),
       status: "pending",
+      memo: form.memo.trim() || undefined,
+      expiresAt: form.expiresAt ? new Date(form.expiresAt).toISOString() : undefined,
     };
     setInvoices((current) => [invoice, ...current]);
     setActiveInvoiceId(invoice.id);
@@ -374,7 +413,7 @@ Reference context: ${MIRA_CONTEXT_URL}`;
     const amount = Number(scheduleForm.amount);
     const nextRun = new Date(scheduleForm.nextRunAt);
     if (!scheduleForm.description.trim()) {
-      setPaymentError("Add a description for this recurring collection.");
+      setPaymentError("Add a description for this recurring invoice.");
       return;
     }
     if (!Number.isFinite(amount) || amount <= 0) {
@@ -402,8 +441,8 @@ Reference context: ${MIRA_CONTEXT_URL}`;
     logAgentActivity({
       agent: "Collections Agent",
       severity: "info",
-      title: "Payment schedule activated",
-      detail: `${schedule.amount} USDT will be requested ${schedule.cadence}. First run: ${new Date(schedule.nextRunAt).toLocaleString()}.`,
+      title: "Invoice schedule activated",
+      detail: `${schedule.amount} USDT invoice links will be created ${schedule.cadence}. First run: ${new Date(schedule.nextRunAt).toLocaleString()}. Customers still approve every payment.`,
     });
     setPaymentError("");
   }
@@ -429,18 +468,13 @@ Reference context: ${MIRA_CONTEXT_URL}`;
     logAgentActivity({
       agent: "Collections Agent",
       severity: "info",
-      title: "Payment schedule deleted",
-      detail: "The recurring collection was removed. Existing invoices and settlement memory were left untouched.",
+      title: "Invoice schedule deleted",
+      detail: "The recurring invoice schedule was removed. Existing invoices and settlement memory were left untouched.",
     });
   }
 
   async function copyPaymentLink(invoice: Invoice) {
-    const params = new URLSearchParams({
-      amount: invoice.amount,
-      merchant: invoice.merchantAddress,
-      description: invoice.description,
-    });
-    const link = `${window.location.origin}/pay/${encodeURIComponent(invoice.id)}?${params.toString()}`;
+    const link = buildPaymentLink(invoice);
     await navigator.clipboard.writeText(link);
     setCopied(invoice.id);
     setTimeout(() => setCopied(""), 1500);
@@ -456,6 +490,8 @@ Reference context: ${MIRA_CONTEXT_URL}`;
       invoice.amount,
       invoice.merchantAddress,
       invoice.description,
+      invoice.memo || "",
+      invoice.expiresAt || "",
     );
     const link = `https://t.me/${TELEGRAM_BOT_USERNAME}?startapp=${encodeURIComponent(startParam)}`;
     await navigator.clipboard.writeText(link);
@@ -487,6 +523,10 @@ Reference context: ${MIRA_CONTEXT_URL}`;
 
     if (!tonConnectUI.connected) {
       tonConnectUI.openModal();
+      return;
+    }
+    if (isInvoiceExpired(activeInvoice)) {
+      setPaymentError("This payment link has expired. Ask the merchant for a fresh PayMorph checkout link.");
       return;
     }
     if (!rawWalletAddress || !wallet) {
@@ -615,8 +655,10 @@ Reference context: ${MIRA_CONTEXT_URL}`;
   const currentRate =
     quote && quotedTonAmount ? Number(unitsToDecimal(quote.outputUnits, 6, 6)) / Number(quotedTonAmount) : 0;
   const routeSignal =
-    activeInvoice?.status === "paid"
+    activeInvoiceStatus === "paid"
       ? "settled"
+      : activeInvoiceStatus === "expired"
+      ? "expired"
       : !quote
       ? "waiting"
       : slippagePercent !== null && slippagePercent > 1
@@ -748,7 +790,7 @@ Help me review upcoming collections, explain route risks, and draft reminders. N
           <section className="stats">
             <article><span>Total invoices</span><strong>{invoices.length}</strong></article>
             <article><span>Paid on-chain</span><strong>{invoices.filter((invoice) => invoice.status === "paid").length}</strong></article>
-            <article><span>Pending</span><strong>{invoices.filter((invoice) => invoice.status === "pending").length}</strong></article>
+            <article><span>Pending</span><strong>{invoices.filter((invoice) => invoice.status === "pending" && !isInvoiceExpired(invoice)).length}</strong></article>
           </section>
 
           <section className="panel">
@@ -761,8 +803,19 @@ Help me review upcoming collections, explain route risks, and draft reminders. N
             <div className="invoice-list">
               {invoices.map((invoice) => (
                 <article key={invoice.id}>
-                  <div><strong>{invoice.description}</strong><span>{invoice.id} / {new Date(invoice.createdAt).toLocaleString()}</span></div>
-                  <div className="invoice-amount"><strong>{invoice.amount} {invoice.receiveToken}</strong><span className={`status ${invoice.status}`}>{invoice.status}</span></div>
+                  <div>
+                    <strong>{invoice.description}</strong>
+                    <span>
+                      {invoice.id}
+                      {invoice.memo ? ` / ${invoice.memo}` : ""} / {new Date(invoice.createdAt).toLocaleString()}
+                    </span>
+                  </div>
+                  <div className="invoice-amount">
+                    <strong>{invoice.amount} {invoice.receiveToken}</strong>
+                    <span className={`status ${isInvoiceExpired(invoice) ? "expired" : invoice.status}`}>
+                      {isInvoiceExpired(invoice) ? "expired" : invoice.status}
+                    </span>
+                  </div>
                   <div className="row-actions">
                     <button onClick={() => copyPaymentLink(invoice)} title="Copy payment link">{copied === invoice.id ? <Check size={17} /> : <Copy size={17} />}</button>
                     <button onClick={() => shareTelegramPaymentLink(invoice)} title="Copy Telegram Mini App link">{copied === `telegram:${invoice.id}` ? <Check size={17} /> : <Send size={17} />}</button>
@@ -789,14 +842,14 @@ Help me review upcoming collections, explain route risks, and draft reminders. N
           <section className="agent-status-grid">
             <article>
               <CalendarClock size={21} />
-              <span>Collections Agent</span>
+              <span>Invoice Agent</span>
               <strong>{schedules.filter((schedule) => schedule.active).length} active schedules</strong>
-              <small>Creates invoices when PayMorph is opened and a schedule is due.</small>
+              <small>Auto-creates invoice links when a schedule is due. It never pays automatically.</small>
             </article>
             <article className={routeSignal === "favorable" ? "agent-good" : ""}>
               <Gauge size={21} />
               <span>Route Guardian</span>
-              <strong>{routeSignal === "favorable" ? "Favorable route" : routeSignal === "waiting" ? "Waiting for quote" : "Monitoring"}</strong>
+              <strong>{routeSignal === "favorable" ? "Favorable route" : routeSignal === "expired" ? "Expired link" : routeSignal === "waiting" ? "Waiting for quote" : "Monitoring"}</strong>
               <small>Compares live Omniston routes with ForgeLens memory.</small>
             </article>
             <article className={routeSignal === "risk" ? "agent-warning" : ""}>
@@ -809,7 +862,7 @@ Help me review upcoming collections, explain route risks, and draft reminders. N
 
           <section className="grid">
             <div className="panel form-panel">
-              <div className="panel-title"><CalendarClock size={20} /> New recurring collection</div>
+              <div className="panel-title"><CalendarClock size={20} /> Auto-create recurring invoices</div>
               <label>Description<input value={scheduleForm.description} onChange={(event) => setScheduleForm({ ...scheduleForm, description: event.target.value })} /></label>
               <div className="form-grid">
                 <label>Amount in USDT<input inputMode="decimal" value={scheduleForm.amount} onChange={(event) => setScheduleForm({ ...scheduleForm, amount: event.target.value })} /></label>
@@ -817,7 +870,7 @@ Help me review upcoming collections, explain route risks, and draft reminders. N
               </div>
               <label>First run<input type="datetime-local" value={scheduleForm.nextRunAt} onChange={(event) => setScheduleForm({ ...scheduleForm, nextRunAt: event.target.value })} /></label>
               <label>Merchant wallet<input placeholder={walletAddress || "Connect wallet or paste address"} value={scheduleForm.merchantAddress} onChange={(event) => setScheduleForm({ ...scheduleForm, merchantAddress: event.target.value })} /></label>
-              <button className="primary-action" onClick={createSchedule}><CalendarClock size={18} /> Activate Collections Agent</button>
+              <button className="primary-action" onClick={createSchedule}><CalendarClock size={18} /> Activate invoice agent</button>
               {paymentError && <p className="error-text">{paymentError}</p>}
             </div>
 
@@ -842,9 +895,9 @@ Help me review upcoming collections, explain route risks, and draft reminders. N
           </section>
 
           <section className="panel">
-            <div className="panel-title"><CalendarClock size={20} /> Payment schedules</div>
+            <div className="panel-title"><CalendarClock size={20} /> Recurring invoice schedules</div>
             {schedules.length === 0 ? (
-              <p className="muted">Create a schedule to activate Collections Agent.</p>
+              <p className="muted">Create a schedule to activate automatic invoice creation. Customers still approve every payment.</p>
             ) : (
               <div className="schedule-list">
                 {schedules.map((schedule) => (
@@ -984,6 +1037,10 @@ Help me review upcoming collections, explain route risks, and draft reminders. N
               <label>Merchant receives<input inputMode="decimal" value={form.amount} onChange={(event) => setForm({ ...form, amount: event.target.value })} /></label>
               <label>Receive token<select value="USDT" disabled><option>USDT</option></select></label>
             </div>
+            <div className="form-grid">
+              <label>Memo / reference<input value={form.memo} onChange={(event) => setForm({ ...form, memo: event.target.value })} /></label>
+              <label>Payment link expires<input type="datetime-local" value={form.expiresAt} onChange={(event) => setForm({ ...form, expiresAt: event.target.value })} /></label>
+            </div>
             <label>Merchant wallet<input placeholder={walletAddress || "Connect merchant wallet or paste address"} value={form.merchantAddress} onChange={(event) => setForm({ ...form, merchantAddress: event.target.value })} /></label>
             <button className="primary-action" onClick={createInvoice}><Link2 size={18} /> Create live payment link</button>
             {paymentError && <p className="error-text">{paymentError}</p>}
@@ -1001,7 +1058,21 @@ Help me review upcoming collections, explain route risks, and draft reminders. N
             )}
             <div className="eyebrow"><ShieldCheck size={16} /> Live mainnet · wallet-approved payment</div>
             <h2>{activeInvoice.description}</h2>
-            <div className="requested-amount"><span>Merchant receives</span><strong>{activeInvoice.amount} USDT</strong><small>To {shortAddress(activeInvoice.merchantAddress)}</small></div>
+            <div className="requested-amount">
+              <span>Merchant receives</span>
+              <strong>{activeInvoice.amount} USDT</strong>
+              <small>To {shortAddress(activeInvoice.merchantAddress)}</small>
+              {(activeInvoice.memo || activeInvoice.expiresAt) && (
+                <div className="invoice-meta">
+                  {activeInvoice.memo && <span>Reference: {activeInvoice.memo}</span>}
+                  {activeInvoice.expiresAt && (
+                    <span className={activeInvoiceExpired ? "meta-expired" : ""}>
+                      {activeInvoiceExpired ? "Expired" : "Expires"}: {new Date(activeInvoice.expiresAt).toLocaleString()}
+                    </span>
+                  )}
+                </div>
+              )}
+            </div>
             <div className="invoice-share-actions">
               <button onClick={() => copyPaymentLink(activeInvoice)}>
                 {copied === activeInvoice.id ? <Check size={17} /> : <Copy size={17} />}
@@ -1026,6 +1097,20 @@ Help me review upcoming collections, explain route risks, and draft reminders. N
                   You created the invoice. Do not approve payment from this screen unless you are testing as the payer.
                   Send the checkout link to the customer; the customer pays TON and gas, while this merchant wallet receives USDT.
                 </p>
+                <div className="checkout-qr">
+                  <div className="qr-frame">
+                    <img src={qrCodeUrl(buildPaymentLink(activeInvoice))} alt="Payment checkout QR code" />
+                  </div>
+                  <div>
+                    <strong><QrCode size={18} /> Scan to open checkout</strong>
+                    <span>{activeInvoice.memo ? `Reference: ${activeInvoice.memo}` : activeInvoice.id}</span>
+                    {activeInvoice.expiresAt && (
+                      <span className={activeInvoiceExpired ? "meta-expired" : ""}>
+                        {activeInvoiceExpired ? "Expired" : "Expires"} {new Date(activeInvoice.expiresAt).toLocaleString()}
+                      </span>
+                    )}
+                  </div>
+                </div>
                 <div className="merchant-share-actions">
                   <button className="primary-action" onClick={() => copyPaymentLink(activeInvoice)}>
                     {copied === activeInvoice.id ? <Check size={18} /> : <Copy size={18} />}
@@ -1052,9 +1137,9 @@ Help me review upcoming collections, explain route risks, and draft reminders. N
                         : quoteError || "Live route currently unavailable."}
                   </small>
                 </div>
-                <button className="primary-action" disabled={!isConnectionRestored || activeInvoice.status === "paid" || !quote || ["building", "awaiting-signature", "tracking"].includes(paymentStatus)} onClick={beginPayment}>
+                <button className="primary-action" disabled={!isConnectionRestored || activeInvoiceStatus === "paid" || activeInvoiceExpired || !quote || ["building", "awaiting-signature", "tracking"].includes(paymentStatus)} onClick={beginPayment}>
                   <Wallet size={18} />
-                  {!isConnectionRestored ? "Loading wallet..." : activeInvoice.status === "paid" ? "Payment completed" : paymentStatus === "building" ? "Building transaction..." : paymentStatus === "awaiting-signature" ? "Approve in wallet..." : paymentStatus === "tracking" ? "Tracking on-chain..." : "Connect and approve payment"}
+                  {!isConnectionRestored ? "Loading wallet..." : activeInvoiceStatus === "paid" ? "Payment completed" : activeInvoiceExpired ? "Payment link expired" : paymentStatus === "building" ? "Building transaction..." : paymentStatus === "awaiting-signature" ? "Approve in wallet..." : paymentStatus === "tracking" ? "Tracking on-chain..." : "Connect and approve payment"}
                 </button>
                 {paymentError && <p className="error-text">{paymentError}</p>}
                 {outgoingTxHash && <p className="success-text">Outgoing transaction: {outgoingTxHash}</p>}
@@ -1064,20 +1149,20 @@ Help me review upcoming collections, explain route risks, and draft reminders. N
             <div className="panel">
               <div className="panel-title"><BarChart3 size={20} /> Smart route</div>
               <div className="winner">
-                <span>{activeInvoice.status === "paid" ? activePaidRecord?.resolver || "STON.fi Omniston" : quote ? quote.resolverName : "Omniston mainnet"}</span>
-                <strong>{activeInvoice.status === "paid" ? "Settled" : quoteStatus === "live" ? "Live quote" : quoteStatus}</strong>
+                <span>{activeInvoiceStatus === "paid" ? activePaidRecord?.resolver || "STON.fi Omniston" : quote ? quote.resolverName : "Omniston mainnet"}</span>
+                <strong>{activeInvoiceStatus === "paid" ? "Settled" : activeInvoiceExpired ? "Expired" : quoteStatus === "live" ? "Live quote" : quoteStatus}</strong>
               </div>
               <div className={`route-signal signal-${routeSignal}`}>
-                {routeSignal === "settled" ? "Route Guardian: payment settled" : routeSignal === "favorable" ? "Route Guardian: favorable vs history" : routeSignal === "risk" ? "Risk Guard: review before signing" : routeSignal === "waiting" ? "Route Guardian: waiting" : "Route Guardian: normal conditions"}
+                {routeSignal === "settled" ? "Route Guardian: payment settled" : routeSignal === "expired" ? "Route Guardian: expired link" : routeSignal === "favorable" ? "Route Guardian: favorable vs history" : routeSignal === "risk" ? "Risk Guard: review before signing" : routeSignal === "waiting" ? "Route Guardian: waiting" : "Route Guardian: normal conditions"}
               </div>
               <div className="metrics">
-                <div><span>Merchant receives</span><strong>{activeInvoice.status === "paid" ? activePaidRecord?.outputUsdt.toFixed(4) || activeInvoice.amount : quote ? unitsToDecimal(quote.outputUnits, 6, 6) : "-"} USDT</strong></div>
-                <div><span>Recommended slippage</span><strong>{activeInvoice.status === "paid" ? activePaidRecord ? `${activePaidRecord.slippagePercent.toFixed(2)}%` : "recorded" : slippagePercent === null ? "-" : `${slippagePercent.toFixed(2)}%`}</strong></div>
-                <div><span>Routes</span><strong>{activeInvoice.status === "paid" ? activePaidRecord?.routeCount || "recorded" : routeCount || "-"}</strong></div>
+                <div><span>Merchant receives</span><strong>{activeInvoiceStatus === "paid" ? activePaidRecord?.outputUsdt.toFixed(4) || activeInvoice.amount : quote ? unitsToDecimal(quote.outputUnits, 6, 6) : "-"} USDT</strong></div>
+                <div><span>Recommended slippage</span><strong>{activeInvoiceStatus === "paid" ? activePaidRecord ? `${activePaidRecord.slippagePercent.toFixed(2)}%` : "recorded" : slippagePercent === null ? "-" : `${slippagePercent.toFixed(2)}%`}</strong></div>
+                <div><span>Routes</span><strong>{activeInvoiceStatus === "paid" ? activePaidRecord?.routeCount || "recorded" : routeCount || "-"}</strong></div>
               </div>
-              <p>{activeInvoice.status === "paid" ? "Settlement confirmed: PayMorph marked this invoice paid after Omniston reported the trade as fully filled." : quote ? "Fixed-output quote: the merchant receives the requested USDT amount after fees." : "Waiting for a real Omniston route."}</p>
+              <p>{activeInvoiceStatus === "paid" ? "Settlement confirmed: PayMorph marked this invoice paid after Omniston reported the trade as fully filled." : activeInvoiceExpired ? "This checkout link is expired. Ask the merchant for a fresh PayMorph link." : quote ? "Fixed-output quote: the merchant receives the requested USDT amount after fees." : "Waiting for a real Omniston route."}</p>
               <button className="secondary-link" onClick={() => copyMiraContext(miraPrompt, "route-mira")}>
-                {copied === "route-mira" ? "Prompt copied" : activeInvoice.status === "paid" ? "Copy Mira receipt" : "Copy Mira explanation"} <Copy size={16} />
+                {copied === "route-mira" ? "Prompt copied" : activeInvoiceStatus === "paid" ? "Copy Mira receipt" : "Copy Mira explanation"} <Copy size={16} />
               </button>
             </div>
           </section>
