@@ -23,6 +23,7 @@ import {
   ShieldAlert,
   Sparkles,
   Pause,
+  Trash2,
   Wallet,
 } from "lucide-react";
 import {
@@ -421,6 +422,16 @@ Reference context: ${MIRA_CONTEXT_URL}`;
         item.id === schedule.id ? { ...item, active: true, nextRunAt: new Date().toISOString() } : item,
       ),
     );
+  }
+
+  function deleteSchedule(scheduleId: string) {
+    setSchedules((current) => current.filter((schedule) => schedule.id !== scheduleId));
+    logAgentActivity({
+      agent: "Collections Agent",
+      severity: "info",
+      title: "Payment schedule deleted",
+      detail: "The recurring collection was removed. Existing invoices and settlement memory were left untouched.",
+    });
   }
 
   async function copyPaymentLink(invoice: Invoice) {
@@ -842,7 +853,8 @@ Help me review upcoming collections, explain route risks, and draft reminders. N
                     <div><strong>{schedule.amount} USDT</strong><span>Next: {new Date(schedule.nextRunAt).toLocaleString()}</span></div>
                     <div className="row-actions">
                       <button onClick={() => toggleSchedule(schedule.id)} title={schedule.active ? "Pause schedule" : "Resume schedule"}>{schedule.active ? <Pause size={17} /> : <Play size={17} />}</button>
-                      <button onClick={() => runScheduleNow(schedule)} title="Run now"><ArrowRight size={17} /></button>
+                      <button onClick={() => runScheduleNow(schedule)} title="Create invoice now"><ArrowRight size={17} /></button>
+                      <button onClick={() => deleteSchedule(schedule.id)} title="Delete schedule"><Trash2 size={17} /></button>
                     </div>
                   </article>
                 ))}
