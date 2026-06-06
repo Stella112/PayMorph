@@ -1,0 +1,52 @@
+PayMorph
+
+PayMorph is a Telegram Mini App and web app for wallet-approved TON payment links.
+
+Core idea:
+- Merchants create payment links denominated in USDT.
+- Customers can pay with TON.
+- STON.fi Omniston finds a live TON-to-USDT route.
+- TonConnect asks the customer to approve the transaction in their wallet.
+- PayMorph only marks an invoice as paid after Omniston reports TRADE_STATUS_FULLY_FILLED.
+
+Important safety model:
+- PayMorph is non-custodial.
+- PayMorph does not hold private keys.
+- PayMorph does not sign transactions for users.
+- Every fund movement requires wallet approval.
+- Users should test with tiny mainnet amounts.
+
+Main product surfaces:
+- Dashboard: shows payment links, pending invoices, paid invoices, and Mini App payment links.
+- Create: creates a tiny USDT invoice that customers pay with TON.
+- Payment page: fetches live Omniston fixed-output quotes, builds a TonConnect wallet request, and tracks settlement.
+- ForgeLens: stores route observations and paid settlement history as payment memory.
+- Agents: provides app-active payment operations.
+
+Agentic payment operations:
+- Collections Agent creates recurring invoices when active schedules become due.
+- Route Guardian compares the current Omniston quote against ForgeLens history.
+- Risk Guard flags elevated slippage before wallet approval.
+- Agents coordinate and warn; they do not autonomously move funds.
+
+Mira integration:
+- Mira does not currently provide a public REST API or webhook for PayMorph to call directly.
+- PayMorph uses Mira as a reasoning and memory companion.
+- PayMorph copies structured context prompts that the user can paste into Mira.
+- Mira can explain routes, summarize invoices, draft reminders, review risks, and remember ForgeLens history.
+
+STON.fi track relevance:
+- PayMorph uses STON.fi Omniston for live TON-to-USDT payment routing.
+- The product turns STON.fi routing into a practical merchant payment workflow.
+- The demo should show a tiny invoice, live quote, wallet approval screen, and settlement tracking.
+
+Mira track relevance:
+- PayMorph gives Mira structured context from live payment routes, schedules, and payment memory.
+- Mira helps novice users understand fees, slippage, wallet approval, and invoice follow-up.
+- Mira acts as the conversational explanation and memory layer around PayMorph operations.
+
+Public app:
+https://paymorph.vercel.app/
+
+Telegram Mini App:
+https://t.me/Paymorhbot?startapp=create

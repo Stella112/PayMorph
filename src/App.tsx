@@ -39,6 +39,7 @@ import {
 } from "./telegram";
 
 const TELEGRAM_BOT_USERNAME = import.meta.env.VITE_TELEGRAM_BOT_USERNAME || "";
+const MIRA_CONTEXT_URL = "https://paymorph.vercel.app/mira-context.txt";
 
 const seedInvoice: Invoice = {
   id: "PM-DEMO",
@@ -279,6 +280,8 @@ export default function App() {
   const miraPrompt = quote
     ? `Mira, explain this live PayMorph mainnet payment in beginner-friendly language.
 
+Reference context: ${MIRA_CONTEXT_URL}
+
 Invoice: ${activeInvoice.id}
 Merchant receives: ${unitsToDecimal(quote.outputUnits, 6, 6)} USDT
 Customer pays: ${quotedTonAmount} TON
@@ -287,7 +290,9 @@ Recommended slippage: ${slippagePercent?.toFixed(2)}%
 Routes: ${routeCount}
 
 Explain the conversion, wallet approval, network fees, and what the payer should verify before signing.`
-    : "Mira, explain how a PayMorph fixed-output TON-to-USDT payment works while the live quote loads.";
+    : `Mira, explain how a PayMorph fixed-output TON-to-USDT payment works while the live quote loads.
+
+Reference context: ${MIRA_CONTEXT_URL}`;
 
   useEffect(() => {
     if (!quote || !quotedTonAmount || !activeInvoice || view !== "pay") return;
@@ -589,6 +594,8 @@ Explain the conversion, wallet approval, network fees, and what the payer should
 
   const miraMemoryPrompt = `Mira, remember this PayMorph ForgeLens performance summary.
 
+Reference context: ${MIRA_CONTEXT_URL}
+
 Live quote observations: ${quoteRecords.length}
 Completed on-chain payments: ${paidRecords.length}
 Average observed TON to USDT rate: ${averageRate ? averageRate.toFixed(4) : "No history yet"}
@@ -597,6 +604,8 @@ Total USDT settled: ${paidRecords.reduce((sum, record) => sum + record.outputUsd
 
 Use this memory when I ask about future PayMorph routes. Explain whether new quotes are better or worse than my history.`;
   const miraDashboardPrompt = `Mira, summarize my PayMorph payment operations.
+
+Reference context: ${MIRA_CONTEXT_URL}
 
 Total invoices: ${invoices.length}
 Pending invoices: ${invoices.filter((invoice) => invoice.status === "pending").length}
@@ -608,6 +617,8 @@ Completed on-chain payments: ${paidRecords.length}
 Help me identify what needs follow-up, which invoices are still pending, and what I should verify before asking customers to pay.`;
   const miraCreatePrompt = `Mira, help me create a PayMorph payment request.
 
+Reference context: ${MIRA_CONTEXT_URL}
+
 I want a beginner-friendly TON payment link where the merchant receives USDT and the customer pays TON through STON.fi Omniston.
 
 Draft a tiny test invoice first:
@@ -616,6 +627,8 @@ Draft a tiny test invoice first:
 
 Explain what I should verify before sharing the link.`;
   const miraAgentPrompt = `Mira, remember and help coordinate these PayMorph payment operations.
+
+Reference context: ${MIRA_CONTEXT_URL}
 
 Active payment schedules: ${schedules.filter((schedule) => schedule.active).length}
 Pending invoices: ${invoices.filter((invoice) => invoice.status === "pending").length}
