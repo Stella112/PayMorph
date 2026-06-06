@@ -242,6 +242,7 @@ export default function App() {
           : [importedInvoice, ...current],
       );
       setActiveInvoiceId(importedInvoice.id);
+      setIsSharedCheckout(true);
       setView("pay");
       return;
     }
@@ -262,7 +263,7 @@ export default function App() {
         setInvoices((current) => [importedInvoice, ...current]);
       }
       setActiveInvoiceId(invoiceId);
-      setIsSharedCheckout(Boolean(checkoutMatch));
+      setIsSharedCheckout(Boolean(checkoutMatch || params.get("pay")));
       setView("pay");
     }
     if (params.get("source") === "mira") {
