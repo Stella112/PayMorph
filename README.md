@@ -103,3 +103,20 @@ Public URL:
 ```text
 https://stella112.github.io/PayMorph/
 ```
+
+## Vercel
+
+PayMorph is configured for Vercel through `vercel.json`.
+
+```bash
+npx vercel
+npx vercel --prod
+```
+
+Production URL:
+
+```text
+https://miraforge-swap.vercel.app/
+```
+
+Use this URL for the Telegram Main Mini App and menu button.
