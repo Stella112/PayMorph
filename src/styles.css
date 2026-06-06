@@ -127,6 +127,30 @@ textarea {
   background: rgba(255, 255, 255, 0.07);
 }
 
+.wallet-control {
+  display: inline-flex;
+  gap: 8px;
+  align-items: center;
+  justify-content: center;
+  min-width: 166px;
+  min-height: 42px;
+  padding: 0 14px;
+  border: 1px solid rgba(88, 240, 189, 0.34);
+  border-radius: 7px;
+  color: #001b12;
+  background: #58f0bd;
+  cursor: pointer;
+  font-weight: 800;
+  white-space: nowrap;
+}
+
+.wallet-control:disabled {
+  color: #91a8b5;
+  background: rgba(255, 255, 255, 0.07);
+  border-color: rgba(148, 177, 190, 0.14);
+  cursor: wait;
+}
+
 .hero-stat {
   display: grid;
   gap: 8px;
@@ -778,6 +802,10 @@ textarea {
 
   .topbar > :last-child {
     justify-self: start;
+  }
+
+  .wallet-control {
+    width: 100%;
   }
 
   .invoice-list article {

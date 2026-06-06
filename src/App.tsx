@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useOmniston } from "@ston-fi/omniston-sdk-react";
-import { TonConnectButton, useTonAddress, useTonConnectUI, useTonWallet } from "@tonconnect/ui-react";
+import { useIsConnectionRestored, useTonAddress, useTonConnectUI, useTonWallet } from "@tonconnect/ui-react";
 import {
   ArrowLeft,
   ArrowRight,
@@ -133,6 +133,7 @@ export default function App() {
   });
 
   const [tonConnectUI] = useTonConnectUI();
+  const isConnectionRestored = useIsConnectionRestored();
   const walletAddress = useTonAddress();
   const wallet = useTonWallet();
   const omniston = useOmniston();
@@ -522,6 +523,15 @@ Explain the conversion, wallet approval, network fees, and what the payer should
     }
   }
 
+  async function toggleWalletConnection() {
+    if (!isConnectionRestored) return;
+    if (tonConnectUI.connected) {
+      await tonConnectUI.disconnect();
+      return;
+    }
+    tonConnectUI.openModal();
+  }
+
   const quoteRecords = forgeLensRecords.filter((record) => record.status === "quoted");
   const paidRecords = forgeLensRecords.filter((record) => record.status === "paid");
   const averageRate =
@@ -607,7 +617,16 @@ Help me review upcoming collections, explain route risks, and draft reminders. N
             Create
           </button>
         </nav>
-        <TonConnectButton />
+        <button className="wallet-control" onClick={toggleWalletConnection} disabled={!isConnectionRestored}>
+          <Wallet size={17} />
+          <span>
+            {!isConnectionRestored
+              ? "Loading wallet..."
+              : walletAddress
+                ? shortAddress(walletAddress)
+                : "Connect wallet"}
+          </span>
+        </button>
       </header>
 
       {view === "dashboard" && (
@@ -644,7 +663,7 @@ Help me review upcoming collections, explain route risks, and draft reminders. N
             <div className="invoice-list">
               {invoices.map((invoice) => (
                 <article key={invoice.id}>
-                  <div><strong>{invoice.description}</strong><span>{invoice.id} · {new Date(invoice.createdAt).toLocaleString()}</span></div>
+                  <div><strong>{invoice.description}</strong><span>{invoice.id} / {new Date(invoice.createdAt).toLocaleString()}</span></div>
                   <div className="invoice-amount"><strong>{invoice.amount} {invoice.receiveToken}</strong><span className={`status ${invoice.status}`}>{invoice.status}</span></div>
                   <div className="row-actions">
                     <button onClick={() => copyPaymentLink(invoice)} title="Copy payment link">{copied === invoice.id ? <Check size={17} /> : <Copy size={17} />}</button>
@@ -893,9 +912,9 @@ Help me review upcoming collections, explain route risks, and draft reminders. N
                       : quoteError || "Live route currently unavailable."}
                 </small>
               </div>
-              <button className="primary-action" disabled={activeInvoice.status === "paid" || !quote || ["building", "awaiting-signature", "tracking"].includes(paymentStatus)} onClick={beginPayment}>
+              <button className="primary-action" disabled={!isConnectionRestored || activeInvoice.status === "paid" || !quote || ["building", "awaiting-signature", "tracking"].includes(paymentStatus)} onClick={beginPayment}>
                 <Wallet size={18} />
-                {activeInvoice.status === "paid" ? "Payment completed" : paymentStatus === "building" ? "Building transaction..." : paymentStatus === "awaiting-signature" ? "Approve in wallet..." : paymentStatus === "tracking" ? "Tracking on-chain..." : "Connect and approve payment"}
+                {!isConnectionRestored ? "Loading wallet..." : activeInvoice.status === "paid" ? "Payment completed" : paymentStatus === "building" ? "Building transaction..." : paymentStatus === "awaiting-signature" ? "Approve in wallet..." : paymentStatus === "tracking" ? "Tracking on-chain..." : "Connect and approve payment"}
               </button>
               {paymentError && <p className="error-text">{paymentError}</p>}
               {outgoingTxHash && <p className="success-text">Outgoing transaction: {outgoingTxHash}</p>}
