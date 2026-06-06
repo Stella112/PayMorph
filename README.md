@@ -2,6 +2,15 @@
 
 PayMorph creates TON payment links where merchants request one token and customers can pay with another. STON.fi Omniston provides route and swap infrastructure, TonConnect handles wallet approval, and Mira provides conversational guidance through custom skills and deep links.
 
+## ForgeLens
+
+ForgeLens is PayMorph's payment intelligence and memory layer. It:
+
+- records meaningful live Omniston quote observations
+- compares historical TON-to-USDT route performance
+- records fully-filled on-chain settlements
+- prepares concise performance summaries that users can deliberately hand to Mira for conversational memory
+
 ## Run locally
 
 ```bash
@@ -58,6 +67,7 @@ Never claim a payment or swap completed unless the user confirms it or provides 
 - Omniston on-chain settlement tracking: working
 - Invoice completion from fully-filled trade status: working
 - Mira deep links and live-context prompts: working
+- ForgeLens route history and settlement memory: working
 
 The first live route is intentionally limited to customer pays TON and merchant receives USDT.
 

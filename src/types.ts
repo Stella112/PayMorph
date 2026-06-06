@@ -19,13 +19,15 @@ export type Invoice = {
   paidWith?: string;
 };
 
-export type RouteQuote = {
+export type ForgeLensRecord = {
   id: string;
-  venue: string;
-  expectedReceive: number;
-  priceImpact: number;
-  slippage: number;
-  confidence: number;
-  latencyMs: number;
-  note: string;
+  invoiceId: string;
+  observedAt: string;
+  status: "quoted" | "paid";
+  resolver: string;
+  inputTon: number;
+  outputUsdt: number;
+  slippagePercent: number;
+  routeCount: number;
+  outgoingTxHash?: string;
 };

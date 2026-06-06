@@ -10,6 +10,8 @@ import {
   Copy,
   ExternalLink,
   FileText,
+  Gauge,
+  History,
   Link2,
   Plus,
   ReceiptText,
@@ -24,7 +26,7 @@ import {
   unitsToDecimal,
   useLiveTonToUsdtQuote,
 } from "./omniston-live";
-import type { Invoice } from "./types";
+import type { ForgeLensRecord, Invoice } from "./types";
 
 const seedInvoice: Invoice = {
   id: "PM-DEMO",
@@ -45,6 +47,15 @@ function loadInvoices(): Invoice[] {
   }
 }
 
+function loadForgeLensRecords(): ForgeLensRecord[] {
+  try {
+    const saved = localStorage.getItem("paymorph-forgelens-v1");
+    return saved ? JSON.parse(saved) : [];
+  } catch {
+    return [];
+  }
+}
+
 function shortAddress(address: string) {
   if (!address || address.length < 15) return address || "Not connected";
   return `${address.slice(0, 7)}...${address.slice(-6)}`;
@@ -52,7 +63,8 @@ function shortAddress(address: string) {
 
 export default function App() {
   const [invoices, setInvoices] = useState<Invoice[]>(loadInvoices);
-  const [view, setView] = useState<"dashboard" | "create" | "pay">("dashboard");
+  const [forgeLensRecords, setForgeLensRecords] = useState<ForgeLensRecord[]>(loadForgeLensRecords);
+  const [view, setView] = useState<"dashboard" | "forgelens" | "create" | "pay">("dashboard");
   const [activeInvoiceId, setActiveInvoiceId] = useState(seedInvoice.id);
   const [copied, setCopied] = useState("");
   const [paymentStatus, setPaymentStatus] = useState<
@@ -74,6 +86,10 @@ export default function App() {
   useEffect(() => {
     localStorage.setItem("paymorph-invoices-v2", JSON.stringify(invoices));
   }, [invoices]);
+
+  useEffect(() => {
+    localStorage.setItem("paymorph-forgelens-v1", JSON.stringify(forgeLensRecords));
+  }, [forgeLensRecords]);
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
@@ -126,6 +142,28 @@ Routes: ${routeCount}
 
 Explain the conversion, wallet approval, network fees, and what the payer should verify before signing.`
     : "Mira, explain how a PayMorph fixed-output TON-to-USDT payment works while the live quote loads.";
+
+  useEffect(() => {
+    if (!quote || !quotedTonAmount || !activeInvoice || view !== "pay") return;
+    const key = `${activeInvoice.id}:${quote.inputUnits}:${quote.outputUnits}:${routeCount}:${slippagePercent}`;
+    setForgeLensRecords((current) => {
+      if (current[0]?.id === key) return current;
+      return [
+        {
+          id: key,
+          invoiceId: activeInvoice.id,
+          observedAt: new Date().toISOString(),
+          status: "quoted" as const,
+          resolver: quote.resolverName,
+          inputTon: Number(quotedTonAmount),
+          outputUsdt: Number(unitsToDecimal(quote.outputUnits, 6, 6)),
+          slippagePercent: slippagePercent || 0,
+          routeCount,
+        },
+        ...current,
+      ].slice(0, 60);
+    });
+  }, [quote?.quoteId, quote?.inputUnits, quote?.outputUnits, routeCount, slippagePercent, view]);
 
   function createInvoice() {
     if (!form.merchantAddress && !walletAddress) {
@@ -230,6 +268,21 @@ Explain the conversion, wallet approval, network fees, and what the payer should
                   : invoice,
               ),
             );
+            setForgeLensRecords((current) => [
+              {
+                id: `paid:${activeInvoice.id}:${progress.outgoingTxHash}`,
+                invoiceId: activeInvoice.id,
+                observedAt: new Date().toISOString(),
+                status: "paid",
+                resolver: quote.resolverName,
+                inputTon: Number(quotedTonAmount || 0),
+                outputUsdt: Number(unitsToDecimal(quote.outputUnits, 6, 6)),
+                slippagePercent: slippagePercent || 0,
+                routeCount,
+                outgoingTxHash: progress.outgoingTxHash,
+              },
+              ...current,
+            ]);
             tracker.unsubscribe();
           } else if (
             progress.status === "TRADE_STATUS_FAILED" ||
@@ -251,6 +304,27 @@ Explain the conversion, wallet approval, network fees, and what the payer should
     }
   }
 
+  const quoteRecords = forgeLensRecords.filter((record) => record.status === "quoted");
+  const paidRecords = forgeLensRecords.filter((record) => record.status === "paid");
+  const averageRate =
+    quoteRecords.length > 0
+      ? quoteRecords.reduce((sum, record) => sum + record.outputUsdt / record.inputTon, 0) / quoteRecords.length
+      : 0;
+  const bestObserved = quoteRecords.reduce<ForgeLensRecord | null>(
+    (best, record) =>
+      !best || record.outputUsdt / record.inputTon > best.outputUsdt / best.inputTon ? record : best,
+    null,
+  );
+  const miraMemoryPrompt = `Mira, remember this PayMorph ForgeLens performance summary.
+
+Live quote observations: ${quoteRecords.length}
+Completed on-chain payments: ${paidRecords.length}
+Average observed TON to USDT rate: ${averageRate ? averageRate.toFixed(4) : "No history yet"}
+Best observed rate: ${bestObserved ? (bestObserved.outputUsdt / bestObserved.inputTon).toFixed(4) : "No history yet"}
+Total USDT settled: ${paidRecords.reduce((sum, record) => sum + record.outputUsdt, 0).toFixed(4)}
+
+Use this memory when I ask about future PayMorph routes. Explain whether new quotes are better or worse than my history.`;
+
   return (
     <main className="app-shell">
       <header className="topbar">
@@ -261,6 +335,9 @@ Explain the conversion, wallet approval, network fees, and what the payer should
         <nav>
           <button className={view === "dashboard" ? "nav-active" : ""} onClick={() => setView("dashboard")}>
             Dashboard
+          </button>
+          <button className={view === "forgelens" ? "nav-active" : ""} onClick={() => setView("forgelens")}>
+            ForgeLens
           </button>
           <button className={view === "create" ? "nav-active" : ""} onClick={() => setView("create")}>
             Create
@@ -312,6 +389,88 @@ Explain the conversion, wallet approval, network fees, and what the payer should
                 </article>
               ))}
             </div>
+          </section>
+        </>
+      )}
+
+      {view === "forgelens" && (
+        <>
+          <section className="pay-header">
+            <div className="eyebrow"><Gauge size={16} /> ForgeLens payment intelligence</div>
+            <h2>Every route becomes useful memory.</h2>
+            <p>
+              ForgeLens captures live Omniston quote observations and completed settlements, then prepares
+              a concise memory handoff for Mira.
+            </p>
+          </section>
+
+          <section className="stats">
+            <article><span>Live observations</span><strong>{quoteRecords.length}</strong></article>
+            <article><span>Paid settlements</span><strong>{paidRecords.length}</strong></article>
+            <article><span>Average USDT per TON</span><strong>{averageRate ? averageRate.toFixed(3) : "-"}</strong></article>
+          </section>
+
+          <section className="grid analytics-grid">
+            <div className="panel">
+              <div className="panel-title"><BarChart3 size={20} /> Observed route performance</div>
+              {quoteRecords.length === 0 ? (
+                <p className="muted">Open a payment link to begin capturing live Omniston quotes.</p>
+              ) : (
+                <div className="rate-chart">
+                  {quoteRecords.slice(0, 12).reverse().map((record) => {
+                    const rate = record.outputUsdt / record.inputTon;
+                    const maxRate = Math.max(...quoteRecords.map((item) => item.outputUsdt / item.inputTon));
+                    return (
+                      <div className="rate-column" key={record.id} title={`${rate.toFixed(4)} USDT per TON`}>
+                        <div style={{ height: `${Math.max(16, (rate / maxRate) * 100)}%` }} />
+                        <span>{rate.toFixed(2)}</span>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+              <div className="analytics-note">
+                <strong>{bestObserved ? `${(bestObserved.outputUsdt / bestObserved.inputTon).toFixed(4)} USDT / TON` : "-"}</strong>
+                <span>Best observed live rate</span>
+              </div>
+            </div>
+
+            <div className="panel">
+              <div className="panel-title"><Bot size={20} /> Mira memory handoff</div>
+              <textarea readOnly value={miraMemoryPrompt} />
+              <button
+                className="secondary-action"
+                onClick={async () => {
+                  await navigator.clipboard.writeText(miraMemoryPrompt);
+                  setCopied("memory");
+                  setTimeout(() => setCopied(""), 1500);
+                }}
+              >
+                {copied === "memory" ? <Check size={18} /> : <Copy size={18} />}
+                {copied === "memory" ? "Copied" : "Copy memory summary"}
+              </button>
+              <a className="primary-action" href={buildPaymentMiraLink("forgelens", "summary")} target="_blank">
+                Continue in Mira <ExternalLink size={17} />
+              </a>
+            </div>
+          </section>
+
+          <section className="panel">
+            <div className="panel-title"><History size={20} /> Settlement memory</div>
+            {paidRecords.length === 0 ? (
+              <p className="muted">Completed on-chain PayMorph payments will appear here.</p>
+            ) : (
+              <div className="memory-table">
+                {paidRecords.map((record) => (
+                  <article key={record.id}>
+                    <div><strong>{record.invoiceId}</strong><span>{new Date(record.observedAt).toLocaleString()}</span></div>
+                    <div><strong>{record.inputTon.toFixed(6)} TON</strong><span>Customer paid</span></div>
+                    <div><strong>{record.outputUsdt.toFixed(4)} USDT</strong><span>Merchant received</span></div>
+                    <div><strong>{record.slippagePercent.toFixed(2)}%</strong><span>Recommended slippage</span></div>
+                  </article>
+                ))}
+              </div>
+            )}
           </section>
         </>
       )}
