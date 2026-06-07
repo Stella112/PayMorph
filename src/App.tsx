@@ -798,7 +798,7 @@ Help me review upcoming collections, explain route risks, and draft reminders. N
     <main className="app-shell">
       <header className="topbar">
         <button className="brand" onClick={() => setView("dashboard")}>
-          <span className="brand-mark">P</span>
+          <img className="brand-logo" src="/paymorph-logo.png" alt="" />
           PayMorph
         </button>
         <nav>
@@ -831,24 +831,76 @@ Help me review upcoming collections, explain route risks, and draft reminders. N
         <>
           <section className="hero">
             <div>
-              <div className="eyebrow"><Sparkles size={16} /> Any token in. Your preferred token out.</div>
-              <h1>Payment links that morph with the customer.</h1>
-              <p>Merchants request USDT. Customers pay TON. STON.fi Omniston finds and settles the live mainnet route.</p>
-              <button className="primary-action hero-action" onClick={() => setView("create")}>
-                <Plus size={18} /> Create payment link
-              </button>
+              <img className="hero-logo" src="/paymorph-logo.png" alt="PayMorph" />
+              <div className="eyebrow"><Sparkles size={16} /> TON payments routed by STON.fi</div>
+              <h1>Payment links that morph into the token merchants want.</h1>
+              <p>
+                PayMorph lets merchants request USDT, share a checkout link or QR code, and accept TON from
+                customers through wallet-approved Omniston routes.
+              </p>
+              <div className="hero-actions">
+                <button className="primary-action hero-action" onClick={() => setView("create")}>
+                  <Plus size={18} /> Create payment link
+                </button>
+                <button className="secondary-action hero-action" onClick={() => setView("forgelens")}>
+                  <Gauge size={18} /> View ForgeLens
+                </button>
+              </div>
             </div>
-            <div className="hero-stat">
-              <span>Settlement engine</span>
-              <strong>Live Omniston mainnet</strong>
-              <small>Every payment requires wallet approval</small>
+            <div className="hero-proof">
+              <strong>USDT invoice</strong>
+              <ArrowRight size={22} />
+              <strong>TON payer</strong>
+              <ArrowRight size={22} />
+              <strong>Omniston route</strong>
             </div>
+          </section>
+
+          <section className="landing-flow">
+            <article>
+              <ReceiptText size={22} />
+              <strong>Create</strong>
+              <span>Set amount, memo, expiry, wallet address, and generate a payment link.</span>
+            </article>
+            <article>
+              <QrCode size={22} />
+              <strong>Share</strong>
+              <span>Send a web checkout, Telegram Mini App link, or QR code to the customer.</span>
+            </article>
+            <article>
+              <ShieldCheck size={22} />
+              <strong>Approve</strong>
+              <span>The payer signs from their wallet. PayMorph never takes custody.</span>
+            </article>
+            <article>
+              <Bot size={22} />
+              <strong>Assist</strong>
+              <span>Mira explains routes, risks, receipts, and treasury strategy in your Ops group.</span>
+            </article>
           </section>
 
           <section className="stats">
             <article><span>Total invoices</span><strong>{invoices.length}</strong></article>
             <article><span>Paid on-chain</span><strong>{invoices.filter((invoice) => invoice.status === "paid").length}</strong></article>
             <article><span>Pending</span><strong>{invoices.filter((invoice) => invoice.status === "pending" && !isInvoiceExpired(invoice)).length}</strong></article>
+          </section>
+
+          <section className="feature-grid">
+            <article>
+              <span>STON.fi Track</span>
+              <strong>Fixed-output TON → USDT payments</strong>
+              <p>Customers can pay TON while merchants receive the requested USDT amount through a live Omniston route.</p>
+            </article>
+            <article>
+              <span>Mira Track</span>
+              <strong>Telegram Ops group assistant</strong>
+              <p>PayMorph prepares context that Mira can use to review invoices, explain routes, and guide beginner merchants.</p>
+            </article>
+            <article>
+              <span>ForgeLens</span>
+              <strong>Route and settlement memory</strong>
+              <p>Completed payments become usable history for future route checks and conservative treasury strategy prompts.</p>
+            </article>
           </section>
 
           <section className="panel">

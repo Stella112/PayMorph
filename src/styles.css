@@ -15,7 +15,10 @@ body {
   margin: 0;
   min-width: 320px;
   min-height: 100vh;
-  background: #061117;
+  background:
+    linear-gradient(180deg, rgba(6, 17, 23, 0.76), #061117 420px),
+    url("/paymorph-webapp-cover-640x360.png") center 0 / min(100%, 1180px) auto no-repeat,
+    #061117;
 }
 
 html[data-telegram="true"] body {
@@ -42,10 +45,10 @@ textarea {
 
 .hero {
   display: grid;
-  grid-template-columns: 1fr auto;
-  gap: 24px;
-  align-items: start;
-  padding: 28px 0 20px;
+  min-height: min(680px, calc(100vh - 120px));
+  align-items: center;
+  padding: 58px 0 36px;
+  position: relative;
 }
 
 .topbar {
@@ -101,14 +104,11 @@ textarea {
   font-weight: 800;
 }
 
-.brand-mark {
-  display: grid;
+.brand-logo {
   width: 32px;
   height: 32px;
-  place-items: center;
   border-radius: 7px;
-  color: #001b12;
-  background: #58f0bd;
+  box-shadow: 0 0 24px rgba(0, 169, 255, 0.36);
 }
 
 .topbar nav {
@@ -151,27 +151,106 @@ textarea {
   cursor: wait;
 }
 
-.hero-stat {
-  display: grid;
-  gap: 8px;
-  min-width: 270px;
-  padding: 20px;
-  border-left: 3px solid #58f0bd;
-  background: #0a1b22;
+.hero::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  border-bottom: 1px solid rgba(88, 240, 189, 0.18);
+  background:
+    linear-gradient(90deg, rgba(6, 17, 23, 0.97) 0%, rgba(6, 17, 23, 0.86) 46%, rgba(4, 28, 46, 0.42) 100%),
+    url("/paymorph-logo.png") right 8% center / min(47vw, 510px) auto no-repeat;
 }
 
-.hero-stat span,
-.hero-stat small {
-  color: #91a8b5;
+.hero-logo {
+  width: 86px;
+  height: 86px;
+  margin-bottom: 18px;
+  border-radius: 20px;
+  box-shadow: 0 0 42px rgba(0, 215, 255, 0.32);
 }
 
-.hero-stat strong {
-  font-size: 1.25rem;
+.hero-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 24px;
+}
+
+.hero-proof {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: center;
+  max-width: 720px;
+  margin-top: 28px;
+  color: #7fffd4;
+}
+
+.hero-proof strong {
+  padding: 10px 12px;
+  border: 1px solid rgba(88, 240, 189, 0.24);
+  border-radius: 8px;
+  background: rgba(7, 33, 38, 0.84);
 }
 
 .hero-action {
   width: fit-content;
   padding: 0 18px;
+}
+
+.landing-flow {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 12px;
+  margin: 18px 0;
+}
+
+.landing-flow article,
+.feature-grid article {
+  display: grid;
+  gap: 9px;
+  min-width: 0;
+  padding: 16px;
+  border: 1px solid rgba(148, 177, 190, 0.18);
+  border-radius: 8px;
+  background: rgba(9, 24, 31, 0.86);
+}
+
+.landing-flow svg,
+.feature-grid span {
+  color: #58f0bd;
+}
+
+.landing-flow strong {
+  font-size: 1.08rem;
+}
+
+.landing-flow span,
+.feature-grid p {
+  color: #a9bdc9;
+  line-height: 1.45;
+}
+
+.feature-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 12px;
+  margin: 18px 0;
+}
+
+.feature-grid span {
+  font-size: 0.82rem;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.feature-grid strong {
+  font-size: 1.2rem;
+}
+
+.feature-grid p {
+  margin: 0;
 }
 
 .stats {
@@ -538,8 +617,8 @@ p {
 }
 
 .hero p {
-  max-width: 760px;
-  font-size: 1.08rem;
+  max-width: 680px;
+  font-size: 1.14rem;
 }
 
 .mira-banner {
@@ -953,8 +1032,26 @@ textarea {
   .workspace,
   .topbar,
   .route-card,
-  .history-list article {
+  .history-list article,
+  .landing-flow,
+  .feature-grid {
     grid-template-columns: 1fr;
+  }
+
+  .hero {
+    min-height: auto;
+    padding: 36px 0 24px;
+  }
+
+  .hero::before {
+    background:
+      linear-gradient(180deg, rgba(6, 17, 23, 0.93), rgba(6, 17, 23, 0.98)),
+      url("/paymorph-logo.png") right 4% top 28px / 190px auto no-repeat;
+  }
+
+  .hero-logo {
+    width: 72px;
+    height: 72px;
   }
 
   .form-grid,
