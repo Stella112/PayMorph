@@ -14,28 +14,37 @@ export const omniston = new Omniston({
 const USDT_MASTER = "EQCxE6mUtQJKFnGfaROTKOt1lZbDiiX1kCixRv7Nw2Id_sDs";
 const USDC_MASTER = "EQB-MPwrd1G6WKNkLz_VnV6WqBDd142KMQv-g1O-8QUA3728";
 
-export type SettlementToken = "USDT" | "USDC";
+export type SettlementToken = "USDT" | "USDC" | "TON";
 
 export const settlementTokens: Record<
   SettlementToken,
-  { symbol: SettlementToken; label: string; decimals: number; master: string }
+  { symbol: SettlementToken; label: string; decimals: number; master?: string; route: "omniston" | "direct" }
 > = {
   USDT: {
     symbol: "USDT",
     label: "USDT",
     decimals: 6,
     master: USDT_MASTER,
+    route: "omniston",
   },
   USDC: {
     symbol: "USDC",
     label: "USDC",
     decimals: 6,
     master: USDC_MASTER,
+    route: "omniston",
+  },
+  TON: {
+    symbol: "TON",
+    label: "TON",
+    decimals: 9,
+    route: "direct",
   },
 };
 
 export function normalizeSettlementToken(value?: string): SettlementToken {
-  return value === "USDC" ? "USDC" : "USDT";
+  if (value === "USDC" || value === "TON") return value;
+  return "USDT";
 }
 
 const tonAsset = {
@@ -55,7 +64,9 @@ function jettonAsset(master: string) {
 }
 
 function outputAssetFor(token: SettlementToken) {
-  return jettonAsset(settlementTokens[token].master);
+  const tokenInfo = settlementTokens[token];
+  if (!tokenInfo.master) throw new Error(`${tokenInfo.symbol} does not use Omniston output routing.`);
+  return jettonAsset(tokenInfo.master);
 }
 
 export function getSettlementToken(token: string) {
@@ -63,7 +74,7 @@ export function getSettlementToken(token: string) {
 }
 
 export function isSupportedSettlementToken(token: string) {
-  return token === "USDT" || token === "USDC";
+  return token === "USDT" || token === "USDC" || token === "TON";
 }
 
 export const tonAddress = (value: string) => ({
@@ -107,7 +118,7 @@ export function hexBocToBase64(value?: string) {
   return btoa(binary);
 }
 
-function decimalToUnits(value: string, decimals: number) {
+export function decimalToUnits(value: string, decimals: number) {
   const [whole = "0", fraction = ""] = value.trim().split(".");
   const normalizedFraction = fraction.padEnd(decimals, "0").slice(0, decimals);
   return `${whole || "0"}${normalizedFraction}`.replace(/^0+(?=\d)/, "") || "0";
@@ -130,6 +141,10 @@ export function useLiveTonToTokenQuote(outputAmount: string, outputToken: string
   useEffect(() => {
     setQuote(null);
     setError("");
+    if (token.route === "direct") {
+      setStatus("idle");
+      return;
+    }
     if (!enabled || !Number(outputAmount)) {
       setStatus("idle");
       return;
@@ -183,6 +198,9 @@ export function useLiveTonToUsdtQuote(outputAmount: string, enabled: boolean) {
 
 export function fetchFreshTonToTokenQuote(client: Omniston, outputAmount: string, outputToken: string) {
   const token = getSettlementToken(outputToken);
+  if (token.route === "direct") {
+    return Promise.reject(new Error(`${token.symbol} payments are direct wallet transfers, not Omniston swaps.`));
+  }
   return new Promise<Quote>((resolve, reject) => {
     let settled = false;
     let subscription: { unsubscribe: () => void } | undefined;

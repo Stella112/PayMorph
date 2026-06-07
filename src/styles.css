@@ -1020,6 +1020,12 @@ textarea {
   background: rgba(247, 213, 106, 0.08);
 }
 
+.route-signal.signal-direct {
+  border-left-color: #58f0bd;
+  color: #7fffd4;
+  background: rgba(88, 240, 189, 0.08);
+}
+
 .route-signal.signal-expired {
   border-left-color: #ff8585;
   color: #ffb4b4;

@@ -28,6 +28,7 @@ import {
 } from "lucide-react";
 import {
   buildTonPaymentTransaction,
+  decimalToUnits,
   fetchFreshTonToTokenQuote,
   getSettlementToken,
   hexBocToBase64,
@@ -317,15 +318,16 @@ export default function App() {
   const activeInvoiceExpired = activeInvoice ? isInvoiceExpired(activeInvoice) : false;
   const activeInvoiceStatus = activeInvoiceExpired ? "expired" : activeInvoice?.status;
   const activeSettlementToken = getSettlementToken(activeInvoice?.receiveToken || "USDT");
+  const isDirectTonPayment = activeSettlementToken.route === "direct";
   const isMerchantShareMode = Boolean(
     activeInvoice && view === "pay" && !isSharedCheckout && activeInvoiceStatus !== "paid",
   );
   const { quote, status: quoteStatus, error: quoteError } = useLiveTonToTokenQuote(
     activeInvoice?.amount || "0",
     activeSettlementToken.symbol,
-    Boolean(activeInvoice && view === "pay" && activeInvoiceStatus === "pending" && !isMerchantShareMode),
+    Boolean(activeInvoice && view === "pay" && activeInvoiceStatus === "pending" && !isMerchantShareMode && !isDirectTonPayment),
   );
-  const quotedTonAmount = quote ? unitsToDecimal(quote.inputUnits, 9, 6) : null;
+  const quotedTonAmount = isDirectTonPayment ? activeInvoice?.amount || null : quote ? unitsToDecimal(quote.inputUnits, 9, 6) : null;
   const swapData = quote?.settlementData.$case === "swap" ? quote.settlementData.value : null;
   const slippagePercent = swapData ? swapData.recommendedSlippagePips / 10000 : null;
   const routeCount = swapData?.routes.length || 0;
@@ -346,7 +348,18 @@ Recommended slippage: ${activePaidRecord ? activePaidRecord.slippagePercent.toFi
 Routes: ${activePaidRecord?.routeCount || "recorded"}
 Outgoing transaction: ${activeOutgoingTxHash || "shown in PayMorph"}
 
-Explain that the payer approved the TON transaction, STON.fi Omniston handled the route, and PayMorph only marks it complete after on-chain settlement confirmation.`
+Explain that the payer approved the TON transaction${activeInvoice.receiveToken === "TON" ? ", and PayMorph used a direct wallet transfer to the merchant." : ", STON.fi Omniston handled the route, and PayMorph only marks it complete after on-chain settlement confirmation."}`
+    : isDirectTonPayment
+    ? `Mira, explain this direct PayMorph TON payment in beginner-friendly language.
+
+Reference context: ${MIRA_CONTEXT_URL}
+
+Invoice: ${activeInvoice.id}
+Merchant receives: ${activeInvoice.amount} TON
+Customer pays: ${activeInvoice.amount} TON plus network gas
+Settlement mode: Direct wallet-approved TON transfer
+
+Explain that no STON.fi route is needed because the merchant selected TON as the receive token. The payer should verify the amount, merchant address, and wallet approval before signing.`
     : quote
     ? `Mira, explain this live PayMorph mainnet payment in beginner-friendly language.
 
@@ -569,17 +582,54 @@ Reference context: ${MIRA_CONTEXT_URL}`;
       setPaymentError("PayMorph live settlement currently requires a TON mainnet wallet.");
       return;
     }
-    if (!quote) {
-      setPaymentError("Wait for a live Omniston quote before approving.");
-      return;
-    }
     if (!activeInvoice.merchantAddress || activeInvoice.merchantAddress.includes("Connect")) {
       setPaymentError("Create a new invoice with a valid merchant TON wallet.");
+      return;
+    }
+    if (!isDirectTonPayment && !quote) {
+      setPaymentError("Wait for a live Omniston quote before approving.");
       return;
     }
 
     try {
       setPaymentStatus("building");
+      if (isDirectTonPayment) {
+        setPaymentStatus("awaiting-signature");
+        const signed = await tonConnectUI.sendTransaction({
+          validUntil: Math.floor(Date.now() / 1000) + 300,
+          network: "-239",
+          messages: [
+            {
+              address: normalizeTonAddress(activeInvoice.merchantAddress),
+              amount: decimalToUnits(activeInvoice.amount, activeSettlementToken.decimals),
+            },
+          ],
+        });
+
+        setPaymentStatus("paid");
+        setOutgoingTxHash("Direct TON transfer submitted by wallet");
+        setInvoices((current) =>
+          current.map((invoice) =>
+            invoice.id === activeInvoice.id ? { ...invoice, status: "paid", paidWith: "TON" } : invoice,
+          ),
+        );
+        setForgeLensRecords((current) => [
+          {
+            id: `paid:${activeInvoice.id}:${signed.boc.slice(0, 18)}`,
+            invoiceId: activeInvoice.id,
+            observedAt: new Date().toISOString(),
+            status: "paid",
+            resolver: "Direct TON transfer",
+            inputTon: Number(activeInvoice.amount),
+            outputUsdt: Number(activeInvoice.amount),
+            slippagePercent: 0,
+            routeCount: 1,
+            outgoingTxHash: "Direct TON transfer submitted by wallet",
+          },
+          ...current,
+        ]);
+        return;
+      }
       const freshQuote = await fetchFreshTonToTokenQuote(
         omniston,
         activeInvoice.amount,
@@ -695,6 +745,8 @@ Reference context: ${MIRA_CONTEXT_URL}`;
       ? "settled"
       : activeInvoiceStatus === "expired"
       ? "expired"
+      : isDirectTonPayment
+      ? "direct"
       : !quote
       ? "waiting"
       : slippagePercent !== null && slippagePercent > 1
@@ -847,8 +899,8 @@ Help me review upcoming collections, explain route risks, and draft reminders. N
               <div className="eyebrow"><Sparkles size={16} /> TON payments routed by STON.fi</div>
               <h1>Payment links that morph into the token merchants want.</h1>
               <p>
-                PayMorph lets merchants request USDT or USDC, share a checkout link or QR code, and accept TON from
-                customers through wallet-approved Omniston routes.
+                PayMorph lets merchants request USDT, USDC, or TON, share a checkout link or QR code, and accept
+                wallet-approved TON payments from customers.
               </p>
               <div className="hero-actions">
                 <button className="primary-action hero-action" onClick={() => setView("create")}>
@@ -860,7 +912,7 @@ Help me review upcoming collections, explain route risks, and draft reminders. N
               </div>
             </div>
             <div className="hero-proof">
-              <strong>USDT or USDC invoice</strong>
+              <strong>USDT, USDC, or TON invoice</strong>
               <ArrowRight size={22} />
               <strong>TON payer</strong>
               <ArrowRight size={22} />
@@ -900,8 +952,8 @@ Help me review upcoming collections, explain route risks, and draft reminders. N
           <section className="feature-grid">
             <article>
               <span>STON.fi Track</span>
-              <strong>Fixed-output TON → stablecoin payments</strong>
-              <p>Customers can pay TON while merchants receive the requested USDT or USDC amount through a live Omniston route.</p>
+              <strong>TON payments with flexible settlement</strong>
+              <p>Customers pay TON while merchants receive USDT, USDC, or direct TON depending on the invoice.</p>
             </article>
             <article>
               <span>Mira Track</span>
@@ -1171,8 +1223,8 @@ Help me review upcoming collections, explain route risks, and draft reminders. N
           <div className="workspace-copy">
             <button className="back-button" onClick={() => setView("dashboard")}><ArrowLeft size={17} /> Dashboard</button>
             <div className="eyebrow"><Link2 size={16} /> Merchant payment request</div>
-            <h2>Create a tiny stablecoin invoice</h2>
-            <p>Start with a tiny mainnet amount. The customer will pay TON and Omniston will settle your selected token to your wallet.</p>
+            <h2>Create a tiny payment invoice</h2>
+            <p>Start with a tiny mainnet amount. The customer pays TON; PayMorph routes to USDT/USDC through Omniston or sends TON directly.</p>
             <div className="mira-card">
               <Bot size={22} />
               <div><strong>Create with Mira</strong><span>{`Ask: "Create a 0.01 ${form.receiveToken} PayMorph request."`}</span></div>
@@ -1287,17 +1339,19 @@ Help me review upcoming collections, explain route risks, and draft reminders. N
                 <div className="panel-title"><Wallet size={20} /> Pay with TON</div>
                 <div className="token-picker"><button className="token-active">TON</button></div>
                 <div className="quote-total">
-                  <span>You pay approximately</span>
+                  <span>{isDirectTonPayment ? "You pay exactly" : "You pay approximately"}</span>
                   <strong>{quotedTonAmount ? `${quotedTonAmount} TON` : "Waiting for live quote"}</strong>
                   <small>
-                    {quoteStatus === "live"
+                    {isDirectTonPayment
+                      ? "Direct wallet-approved TON transfer. No Omniston route is needed."
+                      : quoteStatus === "live"
                       ? `Live mainnet quote from ${quote?.resolverName}`
                       : quoteStatus === "loading"
                         ? "Requesting a fixed-output quote from Omniston..."
                         : quoteError || "Live route currently unavailable."}
                   </small>
                 </div>
-                <button className="primary-action" disabled={!isConnectionRestored || activeInvoiceStatus === "paid" || activeInvoiceExpired || !quote || ["building", "awaiting-signature", "tracking"].includes(paymentStatus)} onClick={beginPayment}>
+                <button className="primary-action" disabled={!isConnectionRestored || activeInvoiceStatus === "paid" || activeInvoiceExpired || (!isDirectTonPayment && !quote) || ["building", "awaiting-signature", "tracking"].includes(paymentStatus)} onClick={beginPayment}>
                   <Wallet size={18} />
                   {!isConnectionRestored ? "Loading wallet..." : activeInvoiceStatus === "paid" ? "Payment completed" : activeInvoiceExpired ? "Payment link expired" : paymentStatus === "building" ? "Building transaction..." : paymentStatus === "awaiting-signature" ? "Approve in wallet..." : paymentStatus === "tracking" ? "Tracking on-chain..." : "Connect and approve payment"}
                 </button>
@@ -1309,18 +1363,18 @@ Help me review upcoming collections, explain route risks, and draft reminders. N
             <div className="panel">
               <div className="panel-title"><BarChart3 size={20} /> Smart route</div>
               <div className="winner">
-                <span>{activeInvoiceStatus === "paid" ? activePaidRecord?.resolver || "STON.fi Omniston" : quote ? quote.resolverName : "Omniston mainnet"}</span>
-                <strong>{activeInvoiceStatus === "paid" ? "Settled" : activeInvoiceExpired ? "Expired" : quoteStatus === "live" ? "Live quote" : quoteStatus}</strong>
+                <span>{activeInvoiceStatus === "paid" ? activePaidRecord?.resolver || (isDirectTonPayment ? "Direct TON transfer" : "STON.fi Omniston") : isDirectTonPayment ? "Direct TON transfer" : quote ? quote.resolverName : "Omniston mainnet"}</span>
+                <strong>{activeInvoiceStatus === "paid" ? "Settled" : activeInvoiceExpired ? "Expired" : isDirectTonPayment ? "Direct" : quoteStatus === "live" ? "Live quote" : quoteStatus}</strong>
               </div>
               <div className={`route-signal signal-${routeSignal}`}>
-                {routeSignal === "settled" ? "Route Guardian: payment settled" : routeSignal === "expired" ? "Route Guardian: expired link" : routeSignal === "favorable" ? "Route Guardian: favorable vs history" : routeSignal === "risk" ? "Risk Guard: review before signing" : routeSignal === "waiting" ? "Route Guardian: waiting" : "Route Guardian: normal conditions"}
+                {routeSignal === "settled" ? "Route Guardian: payment settled" : routeSignal === "direct" ? "Route Guardian: direct TON transfer" : routeSignal === "expired" ? "Route Guardian: expired link" : routeSignal === "favorable" ? "Route Guardian: favorable vs history" : routeSignal === "risk" ? "Risk Guard: review before signing" : routeSignal === "waiting" ? "Route Guardian: waiting" : "Route Guardian: normal conditions"}
               </div>
               <div className="metrics">
-                <div><span>Merchant receives</span><strong>{activeInvoiceStatus === "paid" ? activePaidRecord?.outputUsdt.toFixed(4) || activeInvoice.amount : quote ? unitsToDecimal(quote.outputUnits, activeSettlementToken.decimals, 6) : "-"} {activeInvoice.receiveToken}</strong></div>
-                <div><span>Recommended slippage</span><strong>{activeInvoiceStatus === "paid" ? activePaidRecord ? `${activePaidRecord.slippagePercent.toFixed(2)}%` : "recorded" : slippagePercent === null ? "-" : `${slippagePercent.toFixed(2)}%`}</strong></div>
-                <div><span>Routes</span><strong>{activeInvoiceStatus === "paid" ? activePaidRecord?.routeCount || "recorded" : routeCount || "-"}</strong></div>
+                <div><span>Merchant receives</span><strong>{isDirectTonPayment ? activeInvoice.amount : activeInvoiceStatus === "paid" ? activePaidRecord?.outputUsdt.toFixed(4) || activeInvoice.amount : quote ? unitsToDecimal(quote.outputUnits, activeSettlementToken.decimals, 6) : "-"} {activeInvoice.receiveToken}</strong></div>
+                <div><span>{isDirectTonPayment ? "Transfer mode" : "Recommended slippage"}</span><strong>{isDirectTonPayment ? "Direct" : activeInvoiceStatus === "paid" ? activePaidRecord ? `${activePaidRecord.slippagePercent.toFixed(2)}%` : "recorded" : slippagePercent === null ? "-" : `${slippagePercent.toFixed(2)}%`}</strong></div>
+                <div><span>{isDirectTonPayment ? "Wallet approval" : "Routes"}</span><strong>{isDirectTonPayment ? "Required" : activeInvoiceStatus === "paid" ? activePaidRecord?.routeCount || "recorded" : routeCount || "-"}</strong></div>
               </div>
-              <p>{activeInvoiceStatus === "paid" ? "Settlement confirmed: PayMorph marked this invoice paid after Omniston reported the trade as fully filled." : activeInvoiceExpired ? "This checkout link is expired. Ask the merchant for a fresh PayMorph link." : quote ? "Fixed-output quote: the merchant receives the requested USDT amount after fees." : "Waiting for a real Omniston route."}</p>
+              <p>{activeInvoiceStatus === "paid" ? isDirectTonPayment ? "Direct TON transfer submitted by the payer wallet and recorded by PayMorph." : "Settlement confirmed: PayMorph marked this invoice paid after Omniston reported the trade as fully filled." : activeInvoiceExpired ? "This checkout link is expired. Ask the merchant for a fresh PayMorph link." : isDirectTonPayment ? "Direct TON invoice: the merchant receives TON, so no STON.fi swap route is needed." : quote ? `Fixed-output quote: the merchant receives the requested ${activeInvoice.receiveToken} amount after fees.` : "Waiting for a real Omniston route."}</p>
               <button className="secondary-link" onClick={() => copyMiraContext(miraPrompt, "route-mira")}>
                 {copied === "route-mira" ? "Prompt copied" : activeInvoiceStatus === "paid" ? "Copy Mira receipt" : "Copy Mira explanation"} <Copy size={16} />
               </button>
