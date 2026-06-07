@@ -3,11 +3,13 @@ PayMorph
 PayMorph is a Telegram Mini App and web app for wallet-approved TON payment links.
 
 Core idea:
-- Merchants create payment links denominated in USDT.
-- Customers can pay with TON.
-- STON.fi Omniston finds a live TON-to-USDT route.
+- Merchants create payment links where they choose to receive USDT, USDC, or TON.
+- Customers pay from a TON wallet.
+- For USDT and USDC invoices, STON.fi Omniston finds a live fixed-output route from TON to the merchant's selected receive token.
+- For TON invoices, PayMorph uses a direct wallet-approved TON transfer to the merchant address; no Omniston route is needed.
 - TonConnect asks the customer to approve the transaction in their wallet.
-- PayMorph only marks an invoice as paid after Omniston reports TRADE_STATUS_FULLY_FILLED.
+- PayMorph only marks routed USDT/USDC invoices as paid after Omniston reports TRADE_STATUS_FULLY_FILLED.
+- PayMorph records direct TON invoices after the payer submits the wallet-approved TON transfer.
 
 Important safety model:
 - PayMorph is non-custodial.
@@ -18,8 +20,8 @@ Important safety model:
 
 Main product surfaces:
 - Dashboard: shows payment links, pending invoices, paid invoices, and Mini App payment links.
-- Create: creates a tiny USDT invoice that customers pay with TON.
-- Payment page: fetches live Omniston fixed-output quotes, builds a TonConnect wallet request, and tracks settlement.
+- Create: creates a tiny USDT, USDC, or TON invoice that customers pay from a TON wallet.
+- Payment page: fetches live Omniston fixed-output quotes for USDT/USDC receive flows, supports direct TON transfers, builds a TonConnect wallet request, and tracks settlement.
 - ForgeLens: stores route observations and paid settlement history as payment memory.
 - Agents: provides app-active payment operations.
 
@@ -33,12 +35,13 @@ Mira integration:
 - Mira does not currently provide a public REST API or webhook for PayMorph to call directly.
 - PayMorph uses Mira as a reasoning and memory companion.
 - PayMorph copies structured context prompts that the user can paste into Mira.
-- Mira can explain routes, summarize invoices, draft reminders, review risks, and remember ForgeLens history.
+- Mira can explain Omniston routes, direct TON invoices, summarize invoices, draft reminders, review risks, and remember ForgeLens history.
 
 STON.fi track relevance:
-- PayMorph uses STON.fi Omniston for live TON-to-USDT payment routing.
+- PayMorph uses STON.fi Omniston for live TON-to-USDT and TON-to-USDC payment routing.
 - The product turns STON.fi routing into a practical merchant payment workflow.
-- The demo should show a tiny invoice, live quote, wallet approval screen, and settlement tracking.
+- The demo should show a tiny USDT or USDC invoice, live quote, wallet approval screen, and settlement tracking.
+- The TON receive flow should be described as direct TON settlement, not an Omniston route.
 
 Mira track relevance:
 - PayMorph gives Mira structured context from live payment routes, schedules, and payment memory.
