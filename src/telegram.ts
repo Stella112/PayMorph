@@ -61,6 +61,7 @@ export function parsePayMorphStartParam(startParam: string) {
         amount: String(decoded.amount),
         merchant: String(decoded.merchant),
         description: String(decoded.description || "PayMorph payment"),
+        receiveToken: decoded.receiveToken ? String(decoded.receiveToken) : "USDT",
         memo: decoded.memo ? String(decoded.memo) : "",
         expiresAt: decoded.expiresAt ? String(decoded.expiresAt) : "",
       };
@@ -77,10 +78,11 @@ export function buildTelegramPaymentStartParam(
   amount: string,
   merchant: string,
   description: string,
+  receiveToken = "USDT",
   memo = "",
   expiresAt = "",
 ) {
-  const base64Url = btoa(JSON.stringify({ id, amount, merchant, description, memo, expiresAt }))
+  const base64Url = btoa(JSON.stringify({ id, amount, merchant, description, receiveToken, memo, expiresAt }))
     .replace(/\+/g, "-")
     .replace(/\//g, "_")
     .replace(/=+$/, "");

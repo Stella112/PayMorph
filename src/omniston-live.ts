@@ -12,6 +12,31 @@ export const omniston = new Omniston({
 });
 
 const USDT_MASTER = "EQCxE6mUtQJKFnGfaROTKOt1lZbDiiX1kCixRv7Nw2Id_sDs";
+const USDC_MASTER = "EQB-MPwrd1G6WKNkLz_VnV6WqBDd142KMQv-g1O-8QUA3728";
+
+export type SettlementToken = "USDT" | "USDC";
+
+export const settlementTokens: Record<
+  SettlementToken,
+  { symbol: SettlementToken; label: string; decimals: number; master: string }
+> = {
+  USDT: {
+    symbol: "USDT",
+    label: "USDT",
+    decimals: 6,
+    master: USDT_MASTER,
+  },
+  USDC: {
+    symbol: "USDC",
+    label: "USDC",
+    decimals: 6,
+    master: USDC_MASTER,
+  },
+};
+
+export function normalizeSettlementToken(value?: string): SettlementToken {
+  return value === "USDC" ? "USDC" : "USDT";
+}
 
 const tonAsset = {
   chain: {
@@ -20,12 +45,26 @@ const tonAsset = {
   },
 };
 
-const usdtAsset = {
-  chain: {
-    $case: "ton" as const,
-    value: { kind: { $case: "jetton" as const, value: USDT_MASTER } },
-  },
-};
+function jettonAsset(master: string) {
+  return {
+    chain: {
+      $case: "ton" as const,
+      value: { kind: { $case: "jetton" as const, value: master } },
+    },
+  };
+}
+
+function outputAssetFor(token: SettlementToken) {
+  return jettonAsset(settlementTokens[token].master);
+}
+
+export function getSettlementToken(token: string) {
+  return settlementTokens[normalizeSettlementToken(token)];
+}
+
+export function isSupportedSettlementToken(token: string) {
+  return token === "USDT" || token === "USDC";
+}
 
 export const tonAddress = (value: string) => ({
   chain: { $case: "ton" as const, value: normalizeTonAddress(value) },
@@ -81,11 +120,12 @@ export function unitsToDecimal(value: string, decimals: number, precision = 4) {
   return fraction ? `${whole}.${fraction}` : whole;
 }
 
-export function useLiveTonToUsdtQuote(outputAmount: string, enabled: boolean) {
+export function useLiveTonToTokenQuote(outputAmount: string, outputToken: string, enabled: boolean) {
   const client = useOmniston();
   const [quote, setQuote] = useState<Quote | null>(null);
   const [status, setStatus] = useState<"idle" | "loading" | "live" | "no-quote" | "error">("idle");
   const [error, setError] = useState("");
+  const token = getSettlementToken(outputToken);
 
   useEffect(() => {
     setQuote(null);
@@ -99,8 +139,8 @@ export function useLiveTonToUsdtQuote(outputAmount: string, enabled: boolean) {
     const subscription = client
       .requestForQuote({
         inputAsset: tonAsset,
-        outputAsset: usdtAsset,
-        amount: { $case: "outputUnits", value: decimalToUnits(outputAmount, 6) },
+        outputAsset: outputAssetFor(token.symbol),
+        amount: { $case: "outputUnits", value: decimalToUnits(outputAmount, token.decimals) },
         settlementParams: [
           {
             params: {
@@ -132,12 +172,17 @@ export function useLiveTonToUsdtQuote(outputAmount: string, enabled: boolean) {
       });
 
     return () => subscription.unsubscribe();
-  }, [client, enabled, outputAmount]);
+  }, [client, enabled, outputAmount, token.symbol]);
 
   return { quote, status, error };
 }
 
-export function fetchFreshTonToUsdtQuote(client: Omniston, outputAmount: string) {
+export function useLiveTonToUsdtQuote(outputAmount: string, enabled: boolean) {
+  return useLiveTonToTokenQuote(outputAmount, "USDT", enabled);
+}
+
+export function fetchFreshTonToTokenQuote(client: Omniston, outputAmount: string, outputToken: string) {
+  const token = getSettlementToken(outputToken);
   return new Promise<Quote>((resolve, reject) => {
     let settled = false;
     let subscription: { unsubscribe: () => void } | undefined;
@@ -158,8 +203,8 @@ export function fetchFreshTonToUsdtQuote(client: Omniston, outputAmount: string)
     subscription = client
       .requestForQuote({
         inputAsset: tonAsset,
-        outputAsset: usdtAsset,
-        amount: { $case: "outputUnits", value: decimalToUnits(outputAmount, 6) },
+        outputAsset: outputAssetFor(token.symbol),
+        amount: { $case: "outputUnits", value: decimalToUnits(outputAmount, token.decimals) },
         settlementParams: [
           {
             params: {
@@ -182,6 +227,10 @@ export function fetchFreshTonToUsdtQuote(client: Omniston, outputAmount: string)
         error: (reason) => finish({ error: reason }),
       });
   });
+}
+
+export function fetchFreshTonToUsdtQuote(client: Omniston, outputAmount: string) {
+  return fetchFreshTonToTokenQuote(client, outputAmount, "USDT");
 }
 
 export async function buildTonPaymentTransaction(

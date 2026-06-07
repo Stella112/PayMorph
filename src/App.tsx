@@ -28,12 +28,15 @@ import {
 } from "lucide-react";
 import {
   buildTonPaymentTransaction,
-  fetchFreshTonToUsdtQuote,
+  fetchFreshTonToTokenQuote,
+  getSettlementToken,
   hexBocToBase64,
   normalizeTonAddress,
+  normalizeSettlementToken,
+  settlementTokens,
   trackTonSwap,
   unitsToDecimal,
-  useLiveTonToUsdtQuote,
+  useLiveTonToTokenQuote,
 } from "./omniston-live";
 import type { AgentActivity, ForgeLensRecord, Invoice, PaymentSchedule } from "./types";
 import {
@@ -123,6 +126,7 @@ function buildPaymentLink(invoice: Invoice) {
     amount: invoice.amount,
     merchant: invoice.merchantAddress,
     description: invoice.description,
+    receiveToken: invoice.receiveToken,
   });
   if (invoice.memo) params.set("memo", invoice.memo);
   if (invoice.expiresAt) params.set("expiresAt", invoice.expiresAt);
@@ -150,6 +154,7 @@ export default function App() {
   const [form, setForm] = useState({
     description: "Tiny PayMorph test",
     amount: "0.01",
+    receiveToken: "USDT",
     merchantAddress: "",
     memo: "PM demo",
     expiresAt: defaultExpiryValue(),
@@ -259,7 +264,7 @@ export default function App() {
         id: telegramLaunch.invoiceId,
         description: telegramLaunch.description,
         amount: telegramLaunch.amount,
-        receiveToken: "USDT",
+        receiveToken: normalizeSettlementToken(telegramLaunch.receiveToken),
         merchantAddress: telegramLaunch.merchant,
         createdAt: new Date().toISOString(),
         status: "pending",
@@ -285,7 +290,7 @@ export default function App() {
           id: invoiceId,
           description: params.get("description") || "PayMorph payment",
           amount: params.get("amount") || "0",
-          receiveToken: "USDT",
+          receiveToken: normalizeSettlementToken(params.get("receiveToken") || undefined),
           merchantAddress: params.get("merchant") || "",
           createdAt: new Date().toISOString(),
           status: "pending",
@@ -311,11 +316,13 @@ export default function App() {
   const activeInvoice = invoices.find((invoice) => invoice.id === activeInvoiceId) || invoices[0];
   const activeInvoiceExpired = activeInvoice ? isInvoiceExpired(activeInvoice) : false;
   const activeInvoiceStatus = activeInvoiceExpired ? "expired" : activeInvoice?.status;
+  const activeSettlementToken = getSettlementToken(activeInvoice?.receiveToken || "USDT");
   const isMerchantShareMode = Boolean(
     activeInvoice && view === "pay" && !isSharedCheckout && activeInvoiceStatus !== "paid",
   );
-  const { quote, status: quoteStatus, error: quoteError } = useLiveTonToUsdtQuote(
+  const { quote, status: quoteStatus, error: quoteError } = useLiveTonToTokenQuote(
     activeInvoice?.amount || "0",
+    activeSettlementToken.symbol,
     Boolean(activeInvoice && view === "pay" && activeInvoiceStatus === "pending" && !isMerchantShareMode),
   );
   const quotedTonAmount = quote ? unitsToDecimal(quote.inputUnits, 9, 6) : null;
@@ -332,7 +339,7 @@ export default function App() {
 Reference context: ${MIRA_CONTEXT_URL}
 
 Invoice: ${activeInvoice.id}
-Merchant receives: ${activePaidRecord?.outputUsdt.toFixed(6) || activeInvoice.amount} USDT
+Merchant receives: ${activePaidRecord?.outputUsdt.toFixed(6) || activeInvoice.amount} ${activeInvoice.receiveToken}
 Customer paid: ${activePaidRecord?.inputTon.toFixed(6) || "confirmed"} TON
 Resolver: ${activePaidRecord?.resolver || "STON.fi Omniston"}
 Recommended slippage: ${activePaidRecord ? activePaidRecord.slippagePercent.toFixed(2) : "recorded"}%
@@ -346,14 +353,14 @@ Explain that the payer approved the TON transaction, STON.fi Omniston handled th
 Reference context: ${MIRA_CONTEXT_URL}
 
 Invoice: ${activeInvoice.id}
-Merchant receives: ${unitsToDecimal(quote.outputUnits, 6, 6)} USDT
+Merchant receives: ${unitsToDecimal(quote.outputUnits, activeSettlementToken.decimals, 6)} ${activeSettlementToken.symbol}
 Customer pays: ${quotedTonAmount} TON
 Resolver: ${quote.resolverName}
 Recommended slippage: ${slippagePercent?.toFixed(2)}%
 Routes: ${routeCount}
 
 Explain the conversion, wallet approval, network fees, and what the payer should verify before signing.`
-    : `Mira, explain how a PayMorph fixed-output TON-to-USDT payment works while the live quote loads.
+    : `Mira, explain how a PayMorph fixed-output TON-to-${activeSettlementToken.symbol} payment works while the live quote loads.
 
 Reference context: ${MIRA_CONTEXT_URL}`;
 
@@ -370,14 +377,14 @@ Reference context: ${MIRA_CONTEXT_URL}`;
           status: "quoted" as const,
           resolver: quote.resolverName,
           inputTon: Number(quotedTonAmount),
-          outputUsdt: Number(unitsToDecimal(quote.outputUnits, 6, 6)),
+          outputUsdt: Number(unitsToDecimal(quote.outputUnits, activeSettlementToken.decimals, 6)),
           slippagePercent: slippagePercent || 0,
           routeCount,
         },
         ...current,
       ].slice(0, 60);
     });
-  }, [quote?.quoteId, quote?.inputUnits, quote?.outputUnits, routeCount, slippagePercent, view]);
+  }, [quote?.quoteId, quote?.inputUnits, quote?.outputUnits, routeCount, slippagePercent, activeSettlementToken.decimals, view]);
 
   function createInvoice() {
     if (!form.merchantAddress && !rawWalletAddress) {
@@ -393,7 +400,7 @@ Reference context: ${MIRA_CONTEXT_URL}`;
       id: `PM-${Math.random().toString(36).slice(2, 8).toUpperCase()}`,
       description: form.description,
       amount: form.amount,
-      receiveToken: "USDT",
+      receiveToken: normalizeSettlementToken(form.receiveToken),
       merchantAddress,
       createdAt: new Date().toISOString(),
       status: "pending",
@@ -514,6 +521,7 @@ Reference context: ${MIRA_CONTEXT_URL}`;
       invoice.amount,
       invoice.merchantAddress,
       invoice.description,
+      invoice.receiveToken,
       invoice.memo || "",
       invoice.expiresAt || "",
     );
@@ -572,7 +580,11 @@ Reference context: ${MIRA_CONTEXT_URL}`;
 
     try {
       setPaymentStatus("building");
-      const freshQuote = await fetchFreshTonToUsdtQuote(omniston, activeInvoice.amount);
+      const freshQuote = await fetchFreshTonToTokenQuote(
+        omniston,
+        activeInvoice.amount,
+        activeSettlementToken.symbol,
+      );
       const freshQuotedTonAmount = unitsToDecimal(freshQuote.inputUnits, 9, 6);
       const freshSwapData =
         freshQuote.settlementData.$case === "swap" ? freshQuote.settlementData.value : null;
@@ -620,7 +632,7 @@ Reference context: ${MIRA_CONTEXT_URL}`;
                 status: "paid",
                 resolver: freshQuote.resolverName,
                 inputTon: Number(freshQuotedTonAmount),
-                outputUsdt: Number(unitsToDecimal(freshQuote.outputUnits, 6, 6)),
+                outputUsdt: Number(unitsToDecimal(freshQuote.outputUnits, activeSettlementToken.decimals, 6)),
                 slippagePercent: freshSwapData ? freshSwapData.recommendedSlippagePips / 10000 : 0,
                 routeCount: freshSwapData?.routes.length || 0,
                 outgoingTxHash: progress.outgoingTxHash,
@@ -774,11 +786,11 @@ Help me identify what needs follow-up, which invoices are still pending, and wha
 
 Reference context: ${MIRA_CONTEXT_URL}
 
-I want a beginner-friendly TON payment link where the merchant receives USDT and the customer pays TON through STON.fi Omniston.
+I want a beginner-friendly TON payment link where the merchant receives ${form.receiveToken} and the customer pays TON through STON.fi Omniston.
 
 Draft a tiny test invoice first:
 - Description: ${form.description}
-- Merchant receives: ${form.amount} USDT
+- Merchant receives: ${form.amount} ${form.receiveToken}
 
 Explain what I should verify before sharing the link.`;
   const miraAgentPrompt = `Mira, remember and help coordinate these PayMorph payment operations.
@@ -835,7 +847,7 @@ Help me review upcoming collections, explain route risks, and draft reminders. N
               <div className="eyebrow"><Sparkles size={16} /> TON payments routed by STON.fi</div>
               <h1>Payment links that morph into the token merchants want.</h1>
               <p>
-                PayMorph lets merchants request USDT, share a checkout link or QR code, and accept TON from
+                PayMorph lets merchants request USDT or USDC, share a checkout link or QR code, and accept TON from
                 customers through wallet-approved Omniston routes.
               </p>
               <div className="hero-actions">
@@ -848,7 +860,7 @@ Help me review upcoming collections, explain route risks, and draft reminders. N
               </div>
             </div>
             <div className="hero-proof">
-              <strong>USDT invoice</strong>
+              <strong>USDT or USDC invoice</strong>
               <ArrowRight size={22} />
               <strong>TON payer</strong>
               <ArrowRight size={22} />
@@ -888,8 +900,8 @@ Help me review upcoming collections, explain route risks, and draft reminders. N
           <section className="feature-grid">
             <article>
               <span>STON.fi Track</span>
-              <strong>Fixed-output TON → USDT payments</strong>
-              <p>Customers can pay TON while merchants receive the requested USDT amount through a live Omniston route.</p>
+              <strong>Fixed-output TON → stablecoin payments</strong>
+              <p>Customers can pay TON while merchants receive the requested USDT or USDC amount through a live Omniston route.</p>
             </article>
             <article>
               <span>Mira Track</span>
@@ -1159,11 +1171,11 @@ Help me review upcoming collections, explain route risks, and draft reminders. N
           <div className="workspace-copy">
             <button className="back-button" onClick={() => setView("dashboard")}><ArrowLeft size={17} /> Dashboard</button>
             <div className="eyebrow"><Link2 size={16} /> Merchant payment request</div>
-            <h2>Create a tiny USDT invoice</h2>
-            <p>Start with a tiny mainnet amount. The customer will pay TON and Omniston will settle USDT to your wallet.</p>
+            <h2>Create a tiny stablecoin invoice</h2>
+            <p>Start with a tiny mainnet amount. The customer will pay TON and Omniston will settle your selected token to your wallet.</p>
             <div className="mira-card">
               <Bot size={22} />
-              <div><strong>Create with Mira</strong><span>Ask: "Create a 0.01 USDT PayMorph request."</span></div>
+              <div><strong>Create with Mira</strong><span>{`Ask: "Create a 0.01 ${form.receiveToken} PayMorph request."`}</span></div>
               <button onClick={() => copyMiraContext(miraCreatePrompt, "create-mira")}>
                 {copied === "create-mira" ? "Prompt copied" : "Copy Mira prompt"}
               </button>
@@ -1173,7 +1185,17 @@ Help me review upcoming collections, explain route risks, and draft reminders. N
             <label>Description<input value={form.description} onChange={(event) => setForm({ ...form, description: event.target.value })} /></label>
             <div className="form-grid">
               <label>Merchant receives<input inputMode="decimal" value={form.amount} onChange={(event) => setForm({ ...form, amount: event.target.value })} /></label>
-              <label>Receive token<select value="USDT" disabled><option>USDT</option></select></label>
+              <label>
+                Receive token
+                <select
+                  value={form.receiveToken}
+                  onChange={(event) => setForm({ ...form, receiveToken: normalizeSettlementToken(event.target.value) })}
+                >
+                  {Object.values(settlementTokens).map((token) => (
+                    <option key={token.symbol} value={token.symbol}>{token.label}</option>
+                  ))}
+                </select>
+              </label>
             </div>
             <div className="form-grid">
               <label>Memo / reference<input value={form.memo} onChange={(event) => setForm({ ...form, memo: event.target.value })} /></label>
@@ -1198,7 +1220,7 @@ Help me review upcoming collections, explain route risks, and draft reminders. N
             <h2>{activeInvoice.description}</h2>
             <div className="requested-amount">
               <span>Merchant receives</span>
-              <strong>{activeInvoice.amount} USDT</strong>
+              <strong>{activeInvoice.amount} {activeInvoice.receiveToken}</strong>
               <small>To {shortAddress(activeInvoice.merchantAddress)}</small>
               {(activeInvoice.memo || activeInvoice.expiresAt) && (
                 <div className="invoice-meta">
@@ -1233,7 +1255,7 @@ Help me review upcoming collections, explain route risks, and draft reminders. N
                 <div className="panel-title"><Link2 size={20} /> Share this payment link</div>
                 <p className="muted">
                   You created the invoice. Do not approve payment from this screen unless you are testing as the payer.
-                  Send the checkout link to the customer; the customer pays TON and gas, while this merchant wallet receives USDT.
+                  Send the checkout link to the customer; the customer pays TON and gas, while this merchant wallet receives {activeInvoice.receiveToken}.
                 </p>
                 <div className="checkout-qr">
                   <div className="qr-frame">
@@ -1294,7 +1316,7 @@ Help me review upcoming collections, explain route risks, and draft reminders. N
                 {routeSignal === "settled" ? "Route Guardian: payment settled" : routeSignal === "expired" ? "Route Guardian: expired link" : routeSignal === "favorable" ? "Route Guardian: favorable vs history" : routeSignal === "risk" ? "Risk Guard: review before signing" : routeSignal === "waiting" ? "Route Guardian: waiting" : "Route Guardian: normal conditions"}
               </div>
               <div className="metrics">
-                <div><span>Merchant receives</span><strong>{activeInvoiceStatus === "paid" ? activePaidRecord?.outputUsdt.toFixed(4) || activeInvoice.amount : quote ? unitsToDecimal(quote.outputUnits, 6, 6) : "-"} USDT</strong></div>
+                <div><span>Merchant receives</span><strong>{activeInvoiceStatus === "paid" ? activePaidRecord?.outputUsdt.toFixed(4) || activeInvoice.amount : quote ? unitsToDecimal(quote.outputUnits, activeSettlementToken.decimals, 6) : "-"} {activeInvoice.receiveToken}</strong></div>
                 <div><span>Recommended slippage</span><strong>{activeInvoiceStatus === "paid" ? activePaidRecord ? `${activePaidRecord.slippagePercent.toFixed(2)}%` : "recorded" : slippagePercent === null ? "-" : `${slippagePercent.toFixed(2)}%`}</strong></div>
                 <div><span>Routes</span><strong>{activeInvoiceStatus === "paid" ? activePaidRecord?.routeCount || "recorded" : routeCount || "-"}</strong></div>
               </div>
