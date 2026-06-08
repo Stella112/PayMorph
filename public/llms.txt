@@ -27,6 +27,7 @@ Main product surfaces:
 
 Agentic payment operations:
 - Collections Agent creates recurring invoices when active schedules become due.
+- Recurring schedules support the merchant's selected receive token: USDT, USDC, or TON.
 - Route Guardian compares the current Omniston quote against ForgeLens history.
 - Risk Guard flags elevated slippage before wallet approval.
 - Agents coordinate and warn; they do not autonomously move funds.

@@ -15,6 +15,7 @@ Key features:
 - For direct TON invoices, record the wallet-approved TON transfer as a direct settlement.
 - Store ForgeLens route memory and settlement history.
 - Run app-active agents for recurring invoices, route monitoring, and slippage warnings.
+- Recurring invoice schedules can generate USDT, USDC, or TON payment links when due. Customers still approve each payment manually.
 
 Agents:
 - Collections Agent creates due recurring invoices.

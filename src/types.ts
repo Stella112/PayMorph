@@ -38,6 +38,7 @@ export type PaymentSchedule = {
   id: string;
   description: string;
   amount: string;
+  receiveToken?: string;
   merchantAddress: string;
   cadence: "daily" | "weekly" | "monthly";
   nextRunAt: string;

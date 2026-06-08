@@ -163,6 +163,7 @@ export default function App() {
   const [scheduleForm, setScheduleForm] = useState({
     description: "Weekly design retainer",
     amount: "10",
+    receiveToken: "USDT",
     merchantAddress: "",
     cadence: "weekly" as PaymentSchedule["cadence"],
     nextRunAt: new Date(Date.now() + 60 * 60 * 1000).toISOString().slice(0, 16),
@@ -215,7 +216,7 @@ export default function App() {
       id: `PM-${Math.random().toString(36).slice(2, 8).toUpperCase()}`,
       description: schedule.description,
       amount: schedule.amount,
-      receiveToken: "USDT",
+      receiveToken: normalizeSettlementToken(schedule.receiveToken),
       merchantAddress: schedule.merchantAddress,
       createdAt: now.toISOString(),
       status: "pending" as const,
@@ -240,7 +241,7 @@ export default function App() {
         agent: "Collections Agent",
         severity: "info",
         title: "Recurring invoice created",
-        detail: `${schedule.amount} USDT invoice link created for ${schedule.description}. No funds move until a customer approves it. Next ${schedule.cadence} run scheduled automatically.`,
+        detail: `${schedule.amount} ${normalizeSettlementToken(schedule.receiveToken)} invoice link created for ${schedule.description}. No funds move until a customer approves it. Next ${schedule.cadence} run scheduled automatically.`,
         invoiceId: generatedInvoices[index].id,
       });
     });
@@ -452,6 +453,7 @@ Reference context: ${MIRA_CONTEXT_URL}`;
       id: `SCH-${Math.random().toString(36).slice(2, 7).toUpperCase()}`,
       description: scheduleForm.description.trim(),
       amount: String(amount),
+      receiveToken: normalizeSettlementToken(scheduleForm.receiveToken),
       merchantAddress,
       cadence: scheduleForm.cadence,
       nextRunAt: nextRun.toISOString(),
@@ -462,7 +464,7 @@ Reference context: ${MIRA_CONTEXT_URL}`;
       agent: "Collections Agent",
       severity: "info",
       title: "Invoice schedule activated",
-      detail: `${schedule.amount} USDT invoice links will be created ${schedule.cadence}. First run: ${new Date(schedule.nextRunAt).toLocaleString()}. Customers still approve every payment.`,
+      detail: `${schedule.amount} ${normalizeSettlementToken(schedule.receiveToken)} invoice links will be created ${schedule.cadence}. First run: ${new Date(schedule.nextRunAt).toLocaleString()}. Customers still approve every payment.`,
     });
     setPaymentError("");
   }
@@ -838,7 +840,7 @@ Help me identify what needs follow-up, which invoices are still pending, and wha
 
 Reference context: ${MIRA_CONTEXT_URL}
 
-I want a beginner-friendly TON payment link where the merchant receives ${form.receiveToken} and the customer pays TON through STON.fi Omniston.
+I want a beginner-friendly TON payment link where the merchant receives ${form.receiveToken} and the customer pays TON${form.receiveToken === "TON" ? " as a direct wallet-approved transfer." : " through STON.fi Omniston."}
 
 Draft a tiny test invoice first:
 - Description: ${form.description}
@@ -916,7 +918,7 @@ Help me review upcoming collections, explain route risks, and draft reminders. N
               <ArrowRight size={22} />
               <strong>TON payer</strong>
               <ArrowRight size={22} />
-              <strong>Omniston route</strong>
+              <strong>Omniston or direct</strong>
             </div>
           </section>
 
@@ -1040,7 +1042,10 @@ Help me review upcoming collections, explain route risks, and draft reminders. N
               <div className="panel-title"><CalendarClock size={20} /> Auto-create recurring invoices</div>
               <label>Description<input value={scheduleForm.description} onChange={(event) => setScheduleForm({ ...scheduleForm, description: event.target.value })} /></label>
               <div className="form-grid">
-                <label>Amount in USDT<input inputMode="decimal" value={scheduleForm.amount} onChange={(event) => setScheduleForm({ ...scheduleForm, amount: event.target.value })} /></label>
+                <label>Merchant receives<input inputMode="decimal" value={scheduleForm.amount} onChange={(event) => setScheduleForm({ ...scheduleForm, amount: event.target.value })} /></label>
+                <label>Receive token<select value={scheduleForm.receiveToken} onChange={(event) => setScheduleForm({ ...scheduleForm, receiveToken: normalizeSettlementToken(event.target.value) })}>{Object.values(settlementTokens).map((token) => <option key={token.symbol} value={token.symbol}>{token.label}</option>)}</select></label>
+              </div>
+              <div className="form-grid">
                 <label>Cadence<select value={scheduleForm.cadence} onChange={(event) => setScheduleForm({ ...scheduleForm, cadence: event.target.value as PaymentSchedule["cadence"] })}><option value="daily">Daily</option><option value="weekly">Weekly</option><option value="monthly">Monthly</option></select></label>
               </div>
               <label>First run<input type="datetime-local" value={scheduleForm.nextRunAt} onChange={(event) => setScheduleForm({ ...scheduleForm, nextRunAt: event.target.value })} /></label>
@@ -1078,7 +1083,7 @@ Help me review upcoming collections, explain route risks, and draft reminders. N
                 {schedules.map((schedule) => (
                   <article key={schedule.id}>
                     <div><strong>{schedule.description}</strong><span>{schedule.id} / {schedule.cadence}</span></div>
-                    <div><strong>{schedule.amount} USDT</strong><span>Next: {new Date(schedule.nextRunAt).toLocaleString()}</span></div>
+                    <div><strong>{schedule.amount} {normalizeSettlementToken(schedule.receiveToken)}</strong><span>Next: {new Date(schedule.nextRunAt).toLocaleString()}</span></div>
                     <div className="row-actions">
                       <button onClick={() => toggleSchedule(schedule.id)} title={schedule.active ? "Pause schedule" : "Resume schedule"}>{schedule.active ? <Pause size={17} /> : <Play size={17} />}</button>
                       <button onClick={() => runScheduleNow(schedule)} title="Create invoice now"><ArrowRight size={17} /></button>
